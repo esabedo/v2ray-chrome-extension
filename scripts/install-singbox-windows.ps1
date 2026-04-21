@@ -10,8 +10,15 @@ $TargetBin = Join-Path $TargetDir "sing-box.exe"
 $TempDir = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("singbox-" + [guid]::NewGuid())) -Force
 
 try {
-  if ($Version -eq "latest") {
-    $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/SagerNet/sing-box/releases/latest"
+if ($Version -eq "latest") {
+    $headers = @{
+      "Accept" = "application/vnd.github+json"
+      "User-Agent" = "v2ray-extension-ci"
+    }
+    if ($env:GITHUB_TOKEN) {
+      $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)"
+    }
+    $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/SagerNet/sing-box/releases/latest" -Headers $headers
     $Version = $latest.tag_name
   }
 
@@ -25,7 +32,7 @@ try {
   $zipPath = Join-Path $TempDir.FullName "singbox.zip"
 
   Write-Host "Downloading $downloadUrl"
-  Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath
+  Invoke-WebRequest -Uri $downloadUrl -Headers @{ "User-Agent" = "v2ray-extension-ci" } -OutFile $zipPath
   Expand-Archive -Path $zipPath -DestinationPath $TempDir.FullName -Force
 
   $found = Get-ChildItem -Path $TempDir.FullName -Filter "sing-box.exe" -Recurse | Select-Object -First 1

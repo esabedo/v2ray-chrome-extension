@@ -57,6 +57,8 @@ jobs:
 
       - name: Install sing-box
         run: npm run singbox:install:macos
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Build macOS package
         run: ./scripts/package-macos-pkg.sh "${{ steps.meta.outputs.version }}"
@@ -116,11 +118,18 @@ jobs:
 
       - name: Install sing-box
         run: npm run singbox:install:windows
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Build MSI package
         shell: pwsh
         run: |
           ./scripts/package-windows-msi.ps1 -Version "${{ steps.meta.outputs.version }}"
+
+      - name: List Windows package output
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path dist\install\windows -Recurse | Format-Table FullName,Length
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4

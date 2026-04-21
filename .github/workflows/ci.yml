@@ -46,6 +46,8 @@ jobs:
       - name: Install sing-box (macOS)
         if: runner.os == 'macOS'
         run: npm run singbox:install:macos
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Package macOS PKG
         if: runner.os == 'macOS'
@@ -69,10 +71,18 @@ jobs:
       - name: Install sing-box (Windows)
         if: runner.os == 'Windows'
         run: npm run singbox:install:windows
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Package Windows MSI
         if: runner.os == 'Windows'
         run: npm run package:windows
+
+      - name: List Windows package output
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path dist\install\windows -Recurse | Format-Table FullName,Length
 
       - name: Upload Windows MSI artifact
         if: runner.os == 'Windows'

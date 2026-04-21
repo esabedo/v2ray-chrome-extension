@@ -23,7 +23,11 @@ esac
 
 VERSION="${1:-latest}"
 if [[ "$VERSION" == "latest" ]]; then
-  VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  CURL_ARGS=(-fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: v2ray-extension-ci")
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    CURL_ARGS+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  fi
+  VERSION="$(curl "${CURL_ARGS[@]}" https://api.github.com/repos/SagerNet/sing-box/releases/latest | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
 fi
 
 if [[ -z "$VERSION" ]]; then
@@ -36,7 +40,7 @@ RELEASE_URL="https://github.com/SagerNet/sing-box/releases/download/${VERSION}/$
 
 mkdir -p "$TARGET_DIR"
 echo "Downloading $RELEASE_URL"
-curl -fL "$RELEASE_URL" -o "$TMP_DIR/singbox.tar.gz"
+curl -fL -H "User-Agent: v2ray-extension-ci" "$RELEASE_URL" -o "$TMP_DIR/singbox.tar.gz"
 tar -xzf "$TMP_DIR/singbox.tar.gz" -C "$TMP_DIR"
 
 FOUND_BIN="$(find "$TMP_DIR" -type f -name sing-box | head -n1)"

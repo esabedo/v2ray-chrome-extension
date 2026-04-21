@@ -46,6 +46,10 @@ $OutMsi = Join-Path $DistDir ("v2ray-extension-agent-" + $Version + "-x64.msi")
 & wix build $WixFile `
   -dVersion="$Version" `
   -dStageDir="$StageDir" `
-  -out "$OutMsi"
+  -o "$OutMsi"
+
+if (-not (Test-Path $OutMsi)) {
+  throw "MSI was not created at expected path: $OutMsi"
+}
 
 Write-Host "Built MSI: $OutMsi"
