@@ -48,6 +48,13 @@ body {
   line-height: 1.35;
 }
 
+.onboarding-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -219,6 +226,11 @@ select:focus {
   font-weight: 600;
   border: 1px solid transparent;
   cursor: pointer;
+}
+
+.btn-small {
+  padding: 6px 8px;
+  font-size: 11px;
 }
 
 .btn:disabled {

@@ -17,6 +17,8 @@ type ResponsePayload = {
 
 const onboardingCard = document.querySelector<HTMLElement>("#onboardingCard");
 const onboardingText = document.querySelector<HTMLElement>("#onboardingText");
+const checkAgentButton = document.querySelector<HTMLButtonElement>("#checkAgentButton");
+const copyAgentCommandButton = document.querySelector<HTMLButtonElement>("#copyAgentCommandButton");
 const toastHost = document.querySelector<HTMLElement>("#toastHost");
 const profileNameInput = document.querySelector<HTMLInputElement>("#profileNameInput");
 const vlessInput = document.querySelector<HTMLTextAreaElement>("#vlessInput");
@@ -57,6 +59,8 @@ function setBusy(busy: boolean): void {
   if (disconnectButton) disconnectButton.disabled = busy;
   if (useProfileButton) useProfileButton.disabled = busy || profilesCache.length === 0;
   if (deleteProfileButton) deleteProfileButton.disabled = busy || profilesCache.length === 0;
+  if (checkAgentButton) checkAgentButton.disabled = busy;
+  if (copyAgentCommandButton) copyAgentCommandButton.disabled = busy;
 }
 
 function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void {
@@ -87,6 +91,34 @@ function showToast(message: string, kind: "ok" | "error" = "ok", ttlMs = 2800): 
     toast.classList.remove("visible");
     window.setTimeout(() => toast.remove(), 180);
   }, ttlMs);
+}
+
+function getAgentSetupCommand(): string {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("windows")) {
+    return "npm run singbox:install:windows && npm run agent:run";
+  }
+  if (ua.includes("mac")) {
+    return "npm run singbox:install:macos && npm run agent:run";
+  }
+  return "npm run agent:run";
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  const node = document.createElement("textarea");
+  node.value = text;
+  node.style.position = "fixed";
+  node.style.opacity = "0";
+  document.body.append(node);
+  node.focus();
+  node.select();
+  const ok = document.execCommand("copy");
+  node.remove();
+  return ok;
 }
 
 async function sendMessage(message: object): Promise<ResponsePayload> {
@@ -183,21 +215,27 @@ async function refreshProfiles(): Promise<void> {
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
 }
 
+async function refreshConnectionStatus(showToastOnSuccess = false): Promise<boolean> {
+  const state = await sendMessage({ type: "connection/status" });
+  if (!state.ok) {
+    setStatus(state.message ?? "Unable to fetch status", "error");
+    showOnboarding("Agent service seems unavailable. Check installer/service status.");
+    return false;
+  }
+  hideOnboarding();
+  if (state.connected) {
+    setStatus("Connection active", "connected");
+    if (showToastOnSuccess) showToast("Agent is reachable", "ok");
+    return true;
+  }
+  setStatus(state.message ? `Disconnected: ${state.message}` : "Disconnected", "disconnected");
+  if (showToastOnSuccess) showToast("Agent is reachable", "ok");
+  return true;
+}
+
 async function bootstrap(): Promise<void> {
   await refreshProfiles();
-
-  const state = await sendMessage({ type: "connection/status" });
-  if (state.ok) {
-    hideOnboarding();
-    if (state.connected) {
-      setStatus("Connection active", "connected");
-      return;
-    }
-    setStatus(state.message ? `Disconnected: ${state.message}` : "Disconnected", "disconnected");
-    return;
-  }
-  setStatus(state.message ?? "Unable to fetch status", "error");
-  showOnboarding("Agent service seems unavailable. Check installer/service status.");
+  await refreshConnectionStatus();
 }
 
 vlessInput?.addEventListener("input", () => {
@@ -301,6 +339,30 @@ disconnectButton?.addEventListener("click", async () => {
   }
   setStatus("Disconnected and proxy reset", "disconnected");
   showToast("Disconnected", "ok");
+});
+
+checkAgentButton?.addEventListener("click", async () => {
+  setBusy(true);
+  setStatus("Checking agent...", "working");
+  const ok = await refreshConnectionStatus(true).catch(() => false);
+  if (!ok) {
+    showToast("Agent is still unavailable", "error");
+  }
+  setBusy(false);
+});
+
+copyAgentCommandButton?.addEventListener("click", async () => {
+  const command = getAgentSetupCommand();
+  try {
+    const copied = await copyTextToClipboard(command);
+    if (!copied) {
+      throw new Error("Unable to access clipboard");
+    }
+    showToast("Setup command copied", "ok");
+  } catch (error: unknown) {
+    const text = error instanceof Error ? error.message : "Copy failed";
+    showToast(text, "error");
+  }
 });
 
 void bootstrap();
