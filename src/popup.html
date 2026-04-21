@@ -14,8 +14,14 @@
       </header>
 
       <section class="field">
+        <label class="label" for="profileNameInput">Profile Name</label>
+        <input id="profileNameInput" type="text" placeholder="Optional name" />
+      </section>
+
+      <section class="field">
         <label class="label" for="vlessInput">VLESS URL</label>
         <textarea id="vlessInput" rows="5" placeholder="vless://..."></textarea>
+        <p id="validationHint" class="validation-hint">Paste a valid VLESS URL to save profile.</p>
       </section>
 
       <section class="field">

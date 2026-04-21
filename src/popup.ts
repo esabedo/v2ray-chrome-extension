@@ -1,3 +1,5 @@
+import { parseVlessUrl } from "./vless.js";
+
 type StoredProfile = {
   id: string;
   name: string;
@@ -13,7 +15,9 @@ type ResponsePayload = {
   activeProfileId?: string | null;
 };
 
+const profileNameInput = document.querySelector<HTMLInputElement>("#profileNameInput");
 const vlessInput = document.querySelector<HTMLTextAreaElement>("#vlessInput");
+const validationHint = document.querySelector<HTMLElement>("#validationHint");
 const profileSelect = document.querySelector<HTMLSelectElement>("#profileSelect");
 const saveButton = document.querySelector<HTMLButtonElement>("#saveButton");
 const connectButton = document.querySelector<HTMLButtonElement>("#connectButton");
@@ -24,6 +28,7 @@ const statusNode = document.querySelector<HTMLElement>("#status");
 const statusPill = document.querySelector<HTMLElement>("#statusPill");
 
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
+let profilesCache: StoredProfile[] = [];
 
 function setPill(kind: StatusKind, label: string): void {
   if (!statusPill) return;
@@ -47,21 +52,68 @@ function setBusy(busy: boolean): void {
   if (saveButton) saveButton.disabled = busy;
   if (connectButton) connectButton.disabled = busy;
   if (disconnectButton) disconnectButton.disabled = busy;
-  if (useProfileButton) useProfileButton.disabled = busy;
-  if (deleteProfileButton) deleteProfileButton.disabled = busy;
+  if (useProfileButton) useProfileButton.disabled = busy || profilesCache.length === 0;
+  if (deleteProfileButton) deleteProfileButton.disabled = busy || profilesCache.length === 0;
 }
 
-async function sendMessage(message: object): Promise<ResponsePayload> {
-  return chrome.runtime.sendMessage(message);
+function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void {
+  if (!validationHint) return;
+  validationHint.textContent = text;
+  validationHint.className = kind === "neutral" ? "validation-hint" : `validation-hint ${kind}`;
 }
 
 function getSelectedProfileId(): string | null {
   return profileSelect?.value || null;
 }
 
+function autofillNameFromVless(): void {
+  const raw = vlessInput?.value.trim() ?? "";
+  if (!raw) return;
+  if (profileNameInput?.value.trim()) return;
+  try {
+    const parsed = parseVlessUrl(raw);
+    profileNameInput!.value = parsed.remark || `${parsed.host}:${parsed.port}`;
+  } catch {
+    // ignore
+  }
+}
+
+function validateVlessInput(): boolean {
+  const raw = vlessInput?.value.trim() ?? "";
+  if (!raw) {
+    vlessInput?.classList.remove("valid", "invalid");
+    setValidationHint("Paste a valid VLESS URL to save profile.", "neutral");
+    return false;
+  }
+  try {
+    const parsed = parseVlessUrl(raw);
+    vlessInput?.classList.remove("invalid");
+    vlessInput?.classList.add("valid");
+    setValidationHint(`Valid profile: ${parsed.host}:${parsed.port}`, "ok");
+    return true;
+  } catch (error: unknown) {
+    vlessInput?.classList.remove("valid");
+    vlessInput?.classList.add("invalid");
+    const text = error instanceof Error ? error.message : "Invalid VLESS URL";
+    setValidationHint(text, "error");
+    return false;
+  }
+}
+
+function fillInputsFromProfile(profileId: string | null | undefined): void {
+  if (!profileId) return;
+  const profile = profilesCache.find((p) => p.id === profileId);
+  if (!profile) return;
+  if (vlessInput) vlessInput.value = profile.vlessUrl;
+  if (profileNameInput) profileNameInput.value = profile.name;
+  validateVlessInput();
+}
+
 function renderProfiles(profiles: StoredProfile[], activeProfileId: string | null | undefined): void {
+  profilesCache = profiles;
   if (!profileSelect) return;
   profileSelect.textContent = "";
+
   if (profiles.length === 0) {
     const option = document.createElement("option");
     option.value = "";
@@ -71,6 +123,9 @@ function renderProfiles(profiles: StoredProfile[], activeProfileId: string | nul
     profileSelect.append(option);
     if (useProfileButton) useProfileButton.disabled = true;
     if (deleteProfileButton) deleteProfileButton.disabled = true;
+    if (profileNameInput) profileNameInput.value = "";
+    if (vlessInput) vlessInput.value = "";
+    validateVlessInput();
     return;
   }
 
@@ -81,8 +136,14 @@ function renderProfiles(profiles: StoredProfile[], activeProfileId: string | nul
     option.selected = profile.id === activeProfileId;
     profileSelect.append(option);
   }
+
   if (useProfileButton) useProfileButton.disabled = false;
   if (deleteProfileButton) deleteProfileButton.disabled = false;
+  fillInputsFromProfile(activeProfileId ?? profiles[0].id);
+}
+
+async function sendMessage(message: object): Promise<ResponsePayload> {
+  return chrome.runtime.sendMessage(message);
 }
 
 async function refreshProfiles(): Promise<void> {
@@ -109,15 +170,28 @@ async function bootstrap(): Promise<void> {
   setStatus(state.message ?? "Unable to fetch status", "error");
 }
 
+vlessInput?.addEventListener("input", () => {
+  validateVlessInput();
+  autofillNameFromVless();
+});
+
+profileSelect?.addEventListener("change", () => {
+  fillInputsFromProfile(getSelectedProfileId());
+});
+
 saveButton?.addEventListener("click", async () => {
   const vlessUrl = vlessInput?.value.trim() ?? "";
-  if (!vlessUrl) {
-    setStatus("Paste VLESS URL first", "error");
+  if (!validateVlessInput()) {
+    setStatus("Cannot save invalid profile", "error");
     return;
   }
   setBusy(true);
   setStatus("Saving profile...", "working");
-  const result = await sendMessage({ type: "profile/save", vlessUrl });
+  const result = await sendMessage({
+    type: "profile/save",
+    vlessUrl,
+    name: profileNameInput?.value.trim() || undefined
+  });
   setBusy(false);
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
@@ -145,6 +219,11 @@ useProfileButton?.addEventListener("click", async () => {
 deleteProfileButton?.addEventListener("click", async () => {
   const profileId = getSelectedProfileId();
   if (!profileId) return;
+  const profile = profilesCache.find((p) => p.id === profileId);
+  const title = profile?.name ?? "selected profile";
+  const accepted = window.confirm(`Delete profile "${title}"?`);
+  if (!accepted) return;
+
   setBusy(true);
   setStatus("Removing profile...", "working");
   const result = await sendMessage({ type: "profile/delete", profileId });

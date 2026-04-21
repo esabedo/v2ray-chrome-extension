@@ -15,7 +15,7 @@ type StorageShape = {
 };
 
 type RpcMessage =
-  | { type: "profile/save"; vlessUrl: string }
+  | { type: "profile/save"; vlessUrl: string; name?: string }
   | { type: "profile/list" }
   | { type: "profile/select"; profileId: string }
   | { type: "profile/delete"; profileId: string }
@@ -76,25 +76,29 @@ async function writeStorage(next: StorageShape): Promise<void> {
   await chrome.storage.local.set(next);
 }
 
-async function saveProfile(vlessUrl: string): Promise<RpcResponse> {
+async function saveProfile(vlessUrl: string, customName?: string): Promise<RpcResponse> {
   parseVlessUrl(vlessUrl);
+  const preferredName = customName?.trim();
 
   const state = await readStorage();
   const existing = state.profiles.find((p) => p.vlessUrl === vlessUrl);
   if (existing) {
-    await writeStorage({ profiles: state.profiles, activeProfileId: existing.id });
+    const updatedProfiles = preferredName
+      ? state.profiles.map((p) => (p.id === existing.id ? { ...p, name: preferredName } : p))
+      : state.profiles;
+    await writeStorage({ profiles: updatedProfiles, activeProfileId: existing.id });
     await importProfile(vlessUrl);
     return {
       ok: true,
       message: "Profile already exists and selected",
-      profiles: state.profiles,
+      profiles: updatedProfiles,
       activeProfileId: existing.id
     };
   }
 
   const created: StoredProfile = {
     id: makeProfileId(),
-    name: makeProfileName(vlessUrl),
+    name: preferredName || makeProfileName(vlessUrl),
     vlessUrl,
     createdAt: Date.now()
   };
@@ -193,7 +197,7 @@ chrome.runtime.onMessage.addListener((message: RpcMessage, _sender, sendResponse
   (async () => {
     switch (message.type) {
       case "profile/save":
-        sendResponse(await saveProfile(message.vlessUrl));
+        sendResponse(await saveProfile(message.vlessUrl, message.name));
         return;
       case "profile/list":
         sendResponse(await listProfiles());

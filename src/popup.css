@@ -110,6 +110,58 @@ textarea:focus {
   box-shadow: 0 0 0 1px #3559c6;
 }
 
+input[type="text"] {
+  width: 100%;
+  border: 1px solid #2a2f41;
+  border-radius: 7px;
+  background: #131722;
+  color: #e4ebff;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+input[type="text"]:focus {
+  outline: none;
+  border-color: #4f79ff;
+  box-shadow: 0 0 0 1px #3559c6;
+}
+
+input[type="text"]::placeholder {
+  color: #7380a7;
+}
+
+textarea.invalid {
+  border-color: #853543;
+  box-shadow: 0 0 0 1px #5f2230;
+}
+
+textarea.valid {
+  border-color: #2f7151;
+  box-shadow: 0 0 0 1px #24583f;
+}
+
+textarea:not(:focus).invalid {
+  box-shadow: none;
+}
+
+textarea:not(:focus).valid {
+  box-shadow: none;
+}
+
+.validation-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #7f8bb0;
+}
+
+.validation-hint.error {
+  color: #f4a1ac;
+}
+
+.validation-hint.ok {
+  color: #95ebbe;
+}
+
 select {
   width: 100%;
   border: 1px solid #2a2f41;
