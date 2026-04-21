@@ -279,6 +279,12 @@ h1 {
   gap: 8px;
 }
 
+.profile-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .label {
   font-size: 11px;
   font-weight: 600;

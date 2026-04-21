@@ -60,6 +60,9 @@ const connectButton = document.querySelector<HTMLButtonElement>("#connectButton"
 const disconnectButton = document.querySelector<HTMLButtonElement>("#disconnectButton");
 const useProfileButton = document.querySelector<HTMLButtonElement>("#useProfileButton");
 const deleteProfileButton = document.querySelector<HTMLButtonElement>("#deleteProfileButton");
+const exportProfilesButton = document.querySelector<HTMLButtonElement>("#exportProfilesButton");
+const importProfilesButton = document.querySelector<HTMLButtonElement>("#importProfilesButton");
+const importProfilesInput = document.querySelector<HTMLInputElement>("#importProfilesInput");
 const statusNode = document.querySelector<HTMLElement>("#status");
 const statusPill = document.querySelector<HTMLElement>("#statusPill");
 const setupProgressText = document.querySelector<HTMLElement>("#setupProgressText");
@@ -222,6 +225,8 @@ function setBusy(busy: boolean): void {
   if (disconnectButton) disconnectButton.disabled = busy;
   if (useProfileButton) useProfileButton.disabled = busy || profilesCache.length === 0;
   if (deleteProfileButton) deleteProfileButton.disabled = busy || profilesCache.length === 0;
+  if (exportProfilesButton) exportProfilesButton.disabled = busy;
+  if (importProfilesButton) importProfilesButton.disabled = busy;
   if (checkAgentButton) checkAgentButton.disabled = busy;
   if (copyAgentCommandButton) copyAgentCommandButton.disabled = busy;
   if (toggleDiagnosticsButton) toggleDiagnosticsButton.disabled = busy;
@@ -368,6 +373,42 @@ function classifyConnectError(message: string): { summary: string; detail: strin
 function renderDiagnostics(text: string): void {
   diagnosticsCache = text;
   if (diagnosticsText) diagnosticsText.textContent = text;
+}
+
+function downloadTextFile(filename: string, text: string): void {
+  const blob = new Blob([text], { type: "application/json" });
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
+
+function parseImportPayload(raw: string): Array<{ name?: string; vlessUrl: string }> {
+  const parsed = JSON.parse(raw) as unknown;
+  const items = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { profiles?: unknown }).profiles)
+      ? (parsed as { profiles: unknown[] }).profiles
+      : [];
+  const normalized: Array<{ name?: string; vlessUrl: string }> = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    if (typeof record.vlessUrl !== "string") continue;
+    parseVlessUrl(record.vlessUrl);
+    normalized.push({
+      vlessUrl: record.vlessUrl,
+      name: typeof record.name === "string" ? record.name : undefined
+    });
+  }
+  if (normalized.length === 0) {
+    throw new Error("No valid profiles found in JSON");
+  }
+  return normalized;
 }
 
 function formatDiagnostics(data: AgentDiagnostics): string {
@@ -987,6 +1028,68 @@ quickSecondaryButton?.addEventListener("click", async () => {
 
 runFullCheckButton?.addEventListener("click", async () => {
   await runFullCheck();
+});
+
+exportProfilesButton?.addEventListener("click", async () => {
+  setBusy(true);
+  const result = await sendMessage({ type: "profile/list" }).catch(
+    () => ({ ok: false, message: "Unable to export profiles" } as ResponsePayload)
+  );
+  setBusy(false);
+  if (!result.ok) {
+    setStatus(result.message ?? "Unable to export profiles", "error");
+    showToast("Export failed", "error");
+    return;
+  }
+  const profiles = result.profiles ?? [];
+  if (profiles.length === 0) {
+    showToast("No profiles to export", "error");
+    return;
+  }
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    schema: "v2ray-extension/profiles-v1",
+    profiles: profiles.map((profile) => ({ name: profile.name, vlessUrl: profile.vlessUrl }))
+  };
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadTextFile(`v2ray-profiles-${stamp}.json`, JSON.stringify(payload, null, 2));
+  showToast(`Exported ${profiles.length} profiles`, "ok");
+});
+
+importProfilesButton?.addEventListener("click", () => {
+  importProfilesInput?.click();
+});
+
+importProfilesInput?.addEventListener("change", async () => {
+  const file = importProfilesInput.files?.[0];
+  importProfilesInput.value = "";
+  if (!file) return;
+
+  setBusy(true);
+  try {
+    const raw = await file.text();
+    const items = parseImportPayload(raw);
+    let imported = 0;
+    for (const item of items) {
+      const response = await sendMessage({
+        type: "profile/save",
+        vlessUrl: item.vlessUrl,
+        name: item.name
+      });
+      if (response.ok) {
+        imported += 1;
+      }
+    }
+    await refreshProfiles();
+    setStatus(`Imported ${imported}/${items.length} profiles`, imported > 0 ? "idle" : "error");
+    showToast(imported > 0 ? `Imported ${imported} profiles` : "Import failed", imported > 0 ? "ok" : "error");
+  } catch (error: unknown) {
+    const text = error instanceof Error ? error.message : "Import failed";
+    setStatus(text, "error");
+    showToast(text, "error");
+  } finally {
+    setBusy(false);
+  }
 });
 
 autoRetryToggle?.addEventListener("change", async () => {
