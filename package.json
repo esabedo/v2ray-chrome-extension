@@ -8,6 +8,7 @@
     "agent:run": "./scripts/run-agent-local.sh",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "clean": "rm -rf dist",
+    "package:macos": "./scripts/package-macos-pkg.sh",
     "smoke:agent": "node scripts/smoke-agent.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
