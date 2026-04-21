@@ -73,6 +73,10 @@ curl http://127.0.0.1:8777/v1/diagnostics
 6. Paste a sample `vless://...` in popup.
 7. Click `Save`, then `Connect`, then `Disconnect`.
 8. Verify state text and no extension errors in service worker console.
+9. Validate `Run Full Check` produces actionable next step in Setup Assistant.
+10. Toggle `Auto-retry connect` and verify connect retries up to selected attempts.
+11. Export profiles to JSON, re-import, and verify no invalid profile is accepted.
+12. Open Diagnostics and verify `Copy Bundle` includes sanitized diagnostics + recent events.
 
 ## 6) Installer checks
 

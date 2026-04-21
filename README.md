@@ -15,13 +15,13 @@ Flow:
 3. On connect, Go agent starts `sing-box` and returns `httpProxyPort`.
 4. Extension enables `chrome.proxy` fixed server to `127.0.0.1:<port>`.
 
-## What is new in 0.2.0
+## What is new in 0.3.0
 
-- Modernized popup UX (status pill, onboarding, guided diagnostics, quick actions).
-- Multi-profile management in popup (save/select/delete).
-- Schema-based storage migration for safer upgrades from legacy single-profile storage.
-- Cross-platform smoke stack checks in CI and release pipelines.
-- Release hardening with artifact structure/checksum verification before publishing.
+- First-run Setup Assistant with one-click full health check.
+- Connection reliability policy: auto-retry with configurable attempts and classified errors.
+- Profile portability: import/export profile JSON directly from popup.
+- Support workflow: copyable diagnostics bundle + in-popup recent event timeline.
+- Existing 0.2.0 improvements retained: multi-profile UX, CI smoke stack, schema migration, release hardening.
 
 ## Local run
 
@@ -91,11 +91,10 @@ npm run package:windows
 
 The MSI installs and auto-starts `V2RayExtensionAgent` Windows service.
 
-## Upgrade notes (0.1.x -> 0.2.0)
+## Upgrade notes (0.2.x -> 0.3.0)
 
-- On first run, extension storage is normalized to schema `v2` automatically.
-- Legacy single key `vlessUrl` is migrated to profile list format.
-- Active profile is repaired automatically if stale/missing.
+- UI data model now stores local connection policy (`connectPolicy`) in extension storage.
+- Existing profile schema migration behavior from 0.2.x remains unchanged and backward compatible.
 
 ## GitHub releases
 
