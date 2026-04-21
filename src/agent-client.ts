@@ -6,6 +6,19 @@ export type AgentStatus = {
   lastError?: string | null;
 };
 
+export type AgentDiagnostics = {
+  agentCore: string;
+  singboxBin: string;
+  xrayVersion: string;
+  httpProxyPort: number;
+  socksProxyPort: number;
+  profileExists: boolean;
+  singboxConfigExists: boolean;
+  connected: boolean;
+  lastError?: string | null;
+  xrayStderrTail?: string[];
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${AGENT_BASE_URL}${path}`, {
     ...init,
@@ -45,4 +58,8 @@ export function disconnectAgent(): Promise<{ connected: false }> {
 
 export function getStatus(): Promise<AgentStatus> {
   return request<AgentStatus>("/v1/status");
+}
+
+export function getDiagnostics(): Promise<AgentDiagnostics> {
+  return request<AgentDiagnostics>("/v1/diagnostics");
 }

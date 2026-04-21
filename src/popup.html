@@ -49,6 +49,16 @@
       </div>
 
       <pre id="status" class="status-text">Ready</pre>
+      <div class="diagnostics-tools">
+        <button id="toggleDiagnosticsButton" type="button" class="btn btn-secondary btn-small">Diagnostics</button>
+      </div>
+      <section id="diagnosticsPanel" class="diagnostics hidden">
+        <div class="diagnostics-header">
+          <h2>Diagnostics</h2>
+          <button id="copyDiagnosticsButton" type="button" class="btn btn-ghost btn-small">Copy</button>
+        </div>
+        <pre id="diagnosticsText" class="diagnostics-text">Diagnostics are not loaded yet.</pre>
+      </section>
 
       <div id="toastHost" class="toast-host" aria-live="polite"></div>
     </main>

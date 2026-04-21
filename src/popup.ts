@@ -13,12 +13,30 @@ type ResponsePayload = {
   connected?: boolean;
   profiles?: StoredProfile[];
   activeProfileId?: string | null;
+  diagnostics?: AgentDiagnostics;
+};
+
+type AgentDiagnostics = {
+  agentCore: string;
+  singboxBin: string;
+  xrayVersion: string;
+  httpProxyPort: number;
+  socksProxyPort: number;
+  profileExists: boolean;
+  singboxConfigExists: boolean;
+  connected: boolean;
+  lastError?: string | null;
+  xrayStderrTail?: string[];
 };
 
 const onboardingCard = document.querySelector<HTMLElement>("#onboardingCard");
 const onboardingText = document.querySelector<HTMLElement>("#onboardingText");
 const checkAgentButton = document.querySelector<HTMLButtonElement>("#checkAgentButton");
 const copyAgentCommandButton = document.querySelector<HTMLButtonElement>("#copyAgentCommandButton");
+const toggleDiagnosticsButton = document.querySelector<HTMLButtonElement>("#toggleDiagnosticsButton");
+const copyDiagnosticsButton = document.querySelector<HTMLButtonElement>("#copyDiagnosticsButton");
+const diagnosticsPanel = document.querySelector<HTMLElement>("#diagnosticsPanel");
+const diagnosticsText = document.querySelector<HTMLElement>("#diagnosticsText");
 const toastHost = document.querySelector<HTMLElement>("#toastHost");
 const profileNameInput = document.querySelector<HTMLInputElement>("#profileNameInput");
 const vlessInput = document.querySelector<HTMLTextAreaElement>("#vlessInput");
@@ -34,6 +52,7 @@ const statusPill = document.querySelector<HTMLElement>("#statusPill");
 
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
+let diagnosticsCache = "Diagnostics are not loaded yet.";
 
 function setPill(kind: StatusKind, label: string): void {
   if (!statusPill) return;
@@ -61,6 +80,8 @@ function setBusy(busy: boolean): void {
   if (deleteProfileButton) deleteProfileButton.disabled = busy || profilesCache.length === 0;
   if (checkAgentButton) checkAgentButton.disabled = busy;
   if (copyAgentCommandButton) copyAgentCommandButton.disabled = busy;
+  if (toggleDiagnosticsButton) toggleDiagnosticsButton.disabled = busy;
+  if (copyDiagnosticsButton) copyDiagnosticsButton.disabled = busy;
 }
 
 function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void {
@@ -123,6 +144,43 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 
 async function sendMessage(message: object): Promise<ResponsePayload> {
   return chrome.runtime.sendMessage(message);
+}
+
+function renderDiagnostics(text: string): void {
+  diagnosticsCache = text;
+  if (diagnosticsText) diagnosticsText.textContent = text;
+}
+
+function formatDiagnostics(data: AgentDiagnostics): string {
+  const lines = [
+    `Core: ${data.agentCore}`,
+    `Connected: ${data.connected ? "yes" : "no"}`,
+    `Last error: ${data.lastError || "-"}`,
+    `Profile saved: ${data.profileExists ? "yes" : "no"}`,
+    `Config generated: ${data.singboxConfigExists ? "yes" : "no"}`,
+    `HTTP proxy: 127.0.0.1:${data.httpProxyPort}`,
+    `SOCKS proxy: 127.0.0.1:${data.socksProxyPort}`,
+    `Core version: ${data.xrayVersion}`,
+    `Core binary: ${data.singboxBin}`
+  ];
+  const tail = data.xrayStderrTail?.filter((line) => line.trim()) ?? [];
+  if (tail.length > 0) {
+    lines.push("", "Last core log lines:");
+    lines.push(...tail.slice(-10));
+  }
+  return lines.join("\n");
+}
+
+async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
+  const result = await sendMessage({ type: "connection/diagnostics" });
+  if (!result.ok || !result.diagnostics) {
+    renderDiagnostics(`Diagnostics unavailable.\n${result.message ?? "Unknown error"}`);
+    if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
+    return false;
+  }
+  renderDiagnostics(formatDiagnostics(result.diagnostics));
+  if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
+  return true;
 }
 
 function getSelectedProfileId(): string | null {
@@ -220,6 +278,7 @@ async function refreshConnectionStatus(showToastOnSuccess = false): Promise<bool
   if (!state.ok) {
     setStatus(state.message ?? "Unable to fetch status", "error");
     showOnboarding("Agent service seems unavailable. Check installer/service status.");
+    await loadDiagnostics(true).catch(() => undefined);
     return false;
   }
   hideOnboarding();
@@ -236,6 +295,7 @@ async function refreshConnectionStatus(showToastOnSuccess = false): Promise<bool
 async function bootstrap(): Promise<void> {
   await refreshProfiles();
   await refreshConnectionStatus();
+  renderDiagnostics(diagnosticsCache);
 }
 
 vlessInput?.addEventListener("input", () => {
@@ -320,6 +380,7 @@ connectButton?.addEventListener("click", async () => {
     setStatus(`Error: ${result.message}`, "error");
     showToast(result.message ?? "Connect failed", "error");
     showOnboarding("Agent service seems unavailable. Check installer/service status.");
+    await loadDiagnostics(true).catch(() => undefined);
     return;
   }
   hideOnboarding();
@@ -359,6 +420,46 @@ copyAgentCommandButton?.addEventListener("click", async () => {
       throw new Error("Unable to access clipboard");
     }
     showToast("Setup command copied", "ok");
+  } catch (error: unknown) {
+    const text = error instanceof Error ? error.message : "Copy failed";
+    showToast(text, "error");
+  }
+});
+
+toggleDiagnosticsButton?.addEventListener("click", async () => {
+  const isHidden = diagnosticsPanel?.classList.contains("hidden") ?? true;
+  if (!isHidden) {
+    diagnosticsPanel?.classList.add("hidden");
+    return;
+  }
+  setBusy(true);
+  setStatus("Loading diagnostics...", "working");
+  const ok = await loadDiagnostics(true).catch(() => false);
+  if (!ok) {
+    showToast("Diagnostics unavailable", "error");
+    setStatus("Failed to load diagnostics", "error");
+    setBusy(false);
+    return;
+  }
+  showToast("Diagnostics loaded", "ok");
+  const state = await sendMessage({ type: "connection/status" }).catch(() => ({ ok: false } as ResponsePayload));
+  if (state.ok) {
+    if (state.connected) {
+      setStatus("Connection active", "connected");
+    } else {
+      setStatus(state.message ? `Disconnected: ${state.message}` : "Disconnected", "disconnected");
+    }
+  }
+  setBusy(false);
+});
+
+copyDiagnosticsButton?.addEventListener("click", async () => {
+  try {
+    const copied = await copyTextToClipboard(diagnosticsCache);
+    if (!copied) {
+      throw new Error("Unable to copy diagnostics");
+    }
+    showToast("Diagnostics copied", "ok");
   } catch (error: unknown) {
     const text = error instanceof Error ? error.message : "Copy failed";
     showToast(text, "error");

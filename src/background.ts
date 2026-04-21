@@ -1,4 +1,4 @@
-import { connectAgent, disconnectAgent, getStatus, healthcheck, importProfile } from "./agent-client.js";
+import { connectAgent, disconnectAgent, getDiagnostics, getStatus, healthcheck, importProfile } from "./agent-client.js";
 import { clearProxy, setFixedHttpProxy } from "./proxy.js";
 import { parseVlessUrl } from "./vless.js";
 
@@ -21,7 +21,8 @@ type RpcMessage =
   | { type: "profile/delete"; profileId: string }
   | { type: "connection/connect" }
   | { type: "connection/disconnect" }
-  | { type: "connection/status" };
+  | { type: "connection/status" }
+  | { type: "connection/diagnostics" };
 
 type RpcResponse = {
   ok: boolean;
@@ -29,6 +30,7 @@ type RpcResponse = {
   connected?: boolean;
   profiles?: StoredProfile[];
   activeProfileId?: string | null;
+  diagnostics?: unknown;
 };
 
 function makeProfileName(vlessUrl: string): string {
@@ -189,6 +191,13 @@ async function status(): Promise<RpcResponse> {
   };
 }
 
+async function diagnostics(): Promise<RpcResponse> {
+  return {
+    ok: true,
+    diagnostics: await getDiagnostics()
+  };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.info("V2Ray extension installed");
 });
@@ -216,6 +225,9 @@ chrome.runtime.onMessage.addListener((message: RpcMessage, _sender, sendResponse
         return;
       case "connection/status":
         sendResponse(await status());
+        return;
+      case "connection/diagnostics":
+        sendResponse(await diagnostics());
         return;
       default:
         sendResponse({ ok: false, message: "Unsupported message type" } satisfies RpcResponse);

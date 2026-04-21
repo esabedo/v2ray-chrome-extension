@@ -280,6 +280,49 @@ select:focus {
   padding: 8px 9px;
 }
 
+.diagnostics-tools {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.diagnostics {
+  border: 1px solid #2d3347;
+  border-radius: 8px;
+  background: #111724;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.diagnostics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diagnostics-header h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: #d8e3ff;
+}
+
+.diagnostics-text {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #b6c3e8;
+  background: #0d121d;
+  border: 1px solid #222c42;
+  border-radius: 7px;
+  padding: 8px;
+}
+
 .toast-host {
   position: absolute;
   right: 12px;
