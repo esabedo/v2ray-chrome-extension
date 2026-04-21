@@ -51,6 +51,20 @@
         </div>
       </section>
 
+      <section class="policy">
+        <div class="policy-row">
+          <label class="policy-toggle" for="autoRetryToggle">
+            <input id="autoRetryToggle" type="checkbox" />
+            <span>Auto-retry connect</span>
+          </label>
+          <label class="policy-attempts" for="retryAttemptsInput">
+            <span>Attempts</span>
+            <input id="retryAttemptsInput" type="number" min="1" max="5" step="1" value="3" />
+          </label>
+        </div>
+        <p id="errorHint" class="policy-hint">Connection errors will be classified automatically.</p>
+      </section>
+
       <section class="field">
         <label class="label" for="profileNameInput">Profile Name</label>
         <input id="profileNameInput" type="text" placeholder="Optional name" />

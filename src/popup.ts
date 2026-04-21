@@ -36,6 +36,11 @@ type FixSuggestion = {
   level?: "warn" | "info";
 };
 
+type ConnectPolicy = {
+  autoRetry: boolean;
+  attempts: number;
+};
+
 const onboardingCard = document.querySelector<HTMLElement>("#onboardingCard");
 const onboardingText = document.querySelector<HTMLElement>("#onboardingText");
 const checkAgentButton = document.querySelector<HTMLButtonElement>("#checkAgentButton");
@@ -68,6 +73,9 @@ const assistantNextStep = document.querySelector<HTMLElement>("#assistantNextSte
 const assistantAgent = document.querySelector<HTMLElement>("#assistantAgent");
 const assistantProfile = document.querySelector<HTMLElement>("#assistantProfile");
 const assistantConnection = document.querySelector<HTMLElement>("#assistantConnection");
+const autoRetryToggle = document.querySelector<HTMLInputElement>("#autoRetryToggle");
+const retryAttemptsInput = document.querySelector<HTMLInputElement>("#retryAttemptsInput");
+const errorHint = document.querySelector<HTMLElement>("#errorHint");
 
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
@@ -81,6 +89,8 @@ const flowState = {
   profileReady: false,
   connected: false
 };
+const DEFAULT_CONNECT_POLICY: ConnectPolicy = { autoRetry: true, attempts: 3 };
+let connectPolicy: ConnectPolicy = { ...DEFAULT_CONNECT_POLICY };
 
 function setPill(kind: StatusKind, label: string): void {
   if (!statusPill) return;
@@ -127,6 +137,11 @@ function refreshAssistantCard(): void {
   }
   paintAssistantChip(assistantConnection, "done", "Connection: active");
   if (assistantNextStep) assistantNextStep.textContent = "Setup complete. You can switch profiles or run diagnostics anytime.";
+}
+
+function refreshErrorHint(text?: string): void {
+  if (!errorHint) return;
+  errorHint.textContent = text ?? "Connection errors will be classified automatically.";
 }
 
 function refreshSetupFlow(): void {
@@ -214,6 +229,8 @@ function setBusy(busy: boolean): void {
   if (quickPrimaryButton) quickPrimaryButton.disabled = busy || quickPrimaryAction === "connected";
   if (quickSecondaryButton) quickSecondaryButton.disabled = busy;
   if (runFullCheckButton) runFullCheckButton.disabled = busy;
+  if (autoRetryToggle) autoRetryToggle.disabled = busy;
+  if (retryAttemptsInput) retryAttemptsInput.disabled = busy || !connectPolicy.autoRetry;
 }
 
 function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void {
@@ -284,6 +301,68 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 
 async function sendMessage(message: object): Promise<ResponsePayload> {
   return chrome.runtime.sendMessage(message);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function clampAttempts(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_CONNECT_POLICY.attempts;
+  return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function renderConnectPolicy(): void {
+  if (autoRetryToggle) autoRetryToggle.checked = connectPolicy.autoRetry;
+  if (retryAttemptsInput) retryAttemptsInput.value = String(connectPolicy.attempts);
+}
+
+async function loadConnectPolicy(): Promise<void> {
+  const raw = await chrome.storage.local.get(["connectPolicy"]);
+  const value = raw.connectPolicy as Partial<ConnectPolicy> | undefined;
+  if (value && typeof value === "object") {
+    connectPolicy = {
+      autoRetry: typeof value.autoRetry === "boolean" ? value.autoRetry : DEFAULT_CONNECT_POLICY.autoRetry,
+      attempts: clampAttempts(Number(value.attempts))
+    };
+  }
+  renderConnectPolicy();
+}
+
+async function persistConnectPolicy(): Promise<void> {
+  await chrome.storage.local.set({ connectPolicy });
+}
+
+function classifyConnectError(message: string): { summary: string; detail: string } {
+  const text = message.toLowerCase();
+  if (text.includes("request failed: 404") || text.includes("request failed: 500") || text.includes("request failed: 0")) {
+    return {
+      summary: "Agent API is unreachable",
+      detail: "Start or restart local agent service and run Check Agent."
+    };
+  }
+  if (text.includes("binary not found") || text.includes("no such file")) {
+    return {
+      summary: "Core binary is missing",
+      detail: "Install sing-box and start local agent."
+    };
+  }
+  if (text.includes("port 127.0.0.1") || text.includes("address already in use")) {
+    return {
+      summary: "Local proxy port is busy",
+      detail: "Stop conflicting process or change proxy port."
+    };
+  }
+  if (text.includes("no active profile") || text.includes("active profile not found") || text.includes("no profile")) {
+    return {
+      summary: "Profile is not ready",
+      detail: "Save/select a profile before connecting."
+    };
+  }
+  return {
+    summary: "Connection attempt failed",
+    detail: "Open Diagnostics for details and suggested fixes."
+  };
 }
 
 function renderDiagnostics(text: string): void {
@@ -603,24 +682,43 @@ async function doSaveProfile(): Promise<void> {
 }
 
 async function doConnect(): Promise<void> {
+  const maxAttempts = connectPolicy.autoRetry ? connectPolicy.attempts : 1;
+  let lastFailure: { summary: string; detail: string; raw: string } | null = null;
+
   setBusy(true);
-  setStatus("Connecting...", "working");
-  const result = await sendMessage({ type: "connection/connect" });
-  setBusy(false);
-  if (!result.ok) {
-    setStatus(`Error: ${result.message}`, "error");
-    showToast(result.message ?? "Connect failed", "error");
-    showOnboarding("Agent service seems unavailable. Check installer/service status.");
-    await loadDiagnostics(true).catch(() => undefined);
-    return;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    setStatus(`Connecting (${attempt}/${maxAttempts})...`, "working");
+    const result = await sendMessage({ type: "connection/connect" });
+    if (result.ok) {
+      flowState.agentReady = true;
+      flowState.connected = true;
+      assistantLastError = null;
+      refreshSetupFlow();
+      hideOnboarding();
+      setBusy(false);
+      setStatus("Connected via local agent", "connected");
+      refreshErrorHint();
+      showToast("Connected", "ok");
+      return;
+    }
+
+    const rawMessage = result.message ?? "Connect failed";
+    const classified = classifyConnectError(rawMessage);
+    lastFailure = { ...classified, raw: rawMessage };
+    assistantLastError = classified.summary;
+    refreshSetupFlow();
+    refreshErrorHint(`${classified.summary}. ${classified.detail}`);
+
+    if (attempt < maxAttempts) {
+      await delay(600 * attempt);
+    }
   }
-  flowState.agentReady = true;
-  flowState.connected = true;
-  assistantLastError = null;
-  refreshSetupFlow();
-  hideOnboarding();
-  setStatus("Connected via local agent", "connected");
-  showToast("Connected", "ok");
+
+  setBusy(false);
+  setStatus(`Error: ${lastFailure?.summary ?? "Connect failed"}`, "error");
+  showToast(lastFailure?.summary ?? "Connect failed", "error");
+  showOnboarding("Agent service seems unavailable. Check installer/service status.");
+  await loadDiagnostics(true).catch(() => undefined);
 }
 
 async function doCheckAgent(showSuccessToast = true): Promise<boolean> {
@@ -685,6 +783,7 @@ async function runFullCheck(): Promise<void> {
   }
 
   refreshSetupFlow();
+  refreshErrorHint(assistantLastError ? `Last issue: ${assistantLastError}` : undefined);
   setBusy(false);
 
   if (!flowState.agentReady) {
@@ -707,9 +806,11 @@ async function runFullCheck(): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
+  await loadConnectPolicy();
   refreshSetupFlow();
   await refreshProfiles();
   await refreshConnectionStatus();
+  refreshErrorHint();
   renderDiagnostics(diagnosticsCache);
   renderFixes([
     {
@@ -886,6 +987,18 @@ quickSecondaryButton?.addEventListener("click", async () => {
 
 runFullCheckButton?.addEventListener("click", async () => {
   await runFullCheck();
+});
+
+autoRetryToggle?.addEventListener("change", async () => {
+  connectPolicy.autoRetry = Boolean(autoRetryToggle.checked);
+  renderConnectPolicy();
+  await persistConnectPolicy();
+});
+
+retryAttemptsInput?.addEventListener("change", async () => {
+  connectPolicy.attempts = clampAttempts(Number(retryAttemptsInput.value));
+  renderConnectPolicy();
+  await persistConnectPolicy();
 });
 
 void bootstrap();

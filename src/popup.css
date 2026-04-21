@@ -173,6 +173,55 @@ body {
   color: #b6ceff;
 }
 
+.policy {
+  border: 1px solid #2a3248;
+  border-radius: 8px;
+  background: #101827;
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+}
+
+.policy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.policy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #d5dffb;
+}
+
+.policy-attempts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #a7b6de;
+}
+
+.policy-attempts input {
+  width: 48px;
+  border: 1px solid #2a2f41;
+  border-radius: 6px;
+  background: #131722;
+  color: #e4ebff;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.policy-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #8e9fc8;
+}
+
 h1 {
   margin: 0;
   font-size: 14px;
