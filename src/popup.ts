@@ -61,11 +61,15 @@ const setupProgressText = document.querySelector<HTMLElement>("#setupProgressTex
 const stepAgent = document.querySelector<HTMLElement>("#stepAgent");
 const stepProfile = document.querySelector<HTMLElement>("#stepProfile");
 const stepConnected = document.querySelector<HTMLElement>("#stepConnected");
+const quickPrimaryButton = document.querySelector<HTMLButtonElement>("#quickPrimaryButton");
+const quickSecondaryButton = document.querySelector<HTMLButtonElement>("#quickSecondaryButton");
 
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
 let diagnosticsCache = "Diagnostics are not loaded yet.";
 let lastFixCommands: string[] = [];
+let quickPrimaryAction: "start-agent" | "save-profile" | "connect" | "connected" = "start-agent";
+let quickSecondaryAction: "check-agent" | "copy-setup" | "open-diagnostics" = "check-agent";
 const flowState = {
   agentReady: false,
   profileReady: false,
@@ -92,16 +96,55 @@ function refreshSetupFlow(): void {
   if (!flowState.agentReady) {
     paintStep(stepProfile, "pending");
     paintStep(stepConnected, "pending");
+  } else {
+    paintStep(stepProfile, flowState.profileReady ? "done" : "active");
+    if (!flowState.profileReady) {
+      paintStep(stepConnected, "pending");
+    } else {
+      paintStep(stepConnected, flowState.connected ? "done" : "active");
+    }
+  }
+  refreshQuickActions();
+}
+
+function refreshQuickActions(): void {
+  if (flowState.connected) {
+    quickPrimaryAction = "connected";
+    quickSecondaryAction = "open-diagnostics";
+    if (quickPrimaryButton) {
+      quickPrimaryButton.textContent = "Connected";
+      quickPrimaryButton.disabled = true;
+    }
+    if (quickSecondaryButton) quickSecondaryButton.textContent = "Diagnostics";
     return;
   }
-
-  paintStep(stepProfile, flowState.profileReady ? "done" : "active");
+  if (!flowState.agentReady) {
+    quickPrimaryAction = "start-agent";
+    quickSecondaryAction = "check-agent";
+    if (quickPrimaryButton) {
+      quickPrimaryButton.textContent = "Start Agent";
+      quickPrimaryButton.disabled = false;
+    }
+    if (quickSecondaryButton) quickSecondaryButton.textContent = "Check";
+    return;
+  }
   if (!flowState.profileReady) {
-    paintStep(stepConnected, "pending");
+    quickPrimaryAction = "save-profile";
+    quickSecondaryAction = "open-diagnostics";
+    if (quickPrimaryButton) {
+      quickPrimaryButton.textContent = "Save Profile";
+      quickPrimaryButton.disabled = false;
+    }
+    if (quickSecondaryButton) quickSecondaryButton.textContent = "Diagnostics";
     return;
   }
-
-  paintStep(stepConnected, flowState.connected ? "done" : "active");
+  quickPrimaryAction = "connect";
+  quickSecondaryAction = "open-diagnostics";
+  if (quickPrimaryButton) {
+    quickPrimaryButton.textContent = "Connect";
+    quickPrimaryButton.disabled = false;
+  }
+  if (quickSecondaryButton) quickSecondaryButton.textContent = "Diagnostics";
 }
 
 function setStatus(text: string, kind: StatusKind = "idle"): void {
@@ -126,6 +169,8 @@ function setBusy(busy: boolean): void {
   if (copyAgentCommandButton) copyAgentCommandButton.disabled = busy;
   if (toggleDiagnosticsButton) toggleDiagnosticsButton.disabled = busy;
   if (copyDiagnosticsButton) copyDiagnosticsButton.disabled = busy;
+  if (quickPrimaryButton) quickPrimaryButton.disabled = busy || quickPrimaryAction === "connected";
+  if (quickSecondaryButton) quickSecondaryButton.disabled = busy;
 }
 
 function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void {
@@ -460,30 +505,30 @@ async function refreshConnectionStatus(showToastOnSuccess = false): Promise<bool
   return true;
 }
 
-async function bootstrap(): Promise<void> {
-  refreshSetupFlow();
-  await refreshProfiles();
-  await refreshConnectionStatus();
-  renderDiagnostics(diagnosticsCache);
-  renderFixes([
-    {
-      title: "Load diagnostics",
-      detail: "Open Diagnostics to get actionable suggestions for your current environment.",
-      level: "info"
+async function openDiagnosticsPanel(): Promise<void> {
+  diagnosticsPanel?.classList.remove("hidden");
+  setBusy(true);
+  setStatus("Loading diagnostics...", "working");
+  const ok = await loadDiagnostics(true).catch(() => false);
+  if (!ok) {
+    showToast("Diagnostics unavailable", "error");
+    setStatus("Failed to load diagnostics", "error");
+    setBusy(false);
+    return;
+  }
+  showToast("Diagnostics loaded", "ok");
+  const state = await sendMessage({ type: "connection/status" }).catch(() => ({ ok: false } as ResponsePayload));
+  if (state.ok) {
+    if (state.connected) {
+      setStatus("Connection active", "connected");
+    } else {
+      setStatus(state.message ? `Disconnected: ${state.message}` : "Disconnected", "disconnected");
     }
-  ]);
+  }
+  setBusy(false);
 }
 
-vlessInput?.addEventListener("input", () => {
-  validateVlessInput();
-  autofillNameFromVless();
-});
-
-profileSelect?.addEventListener("change", () => {
-  fillInputsFromProfile(getSelectedProfileId());
-});
-
-saveButton?.addEventListener("click", async () => {
+async function doSaveProfile(): Promise<void> {
   const vlessUrl = vlessInput?.value.trim() ?? "";
   if (!validateVlessInput()) {
     setStatus("Cannot save invalid profile", "error");
@@ -508,6 +553,77 @@ saveButton?.addEventListener("click", async () => {
   refreshSetupFlow();
   setStatus("Profile saved and selected", "idle");
   showToast("Profile saved", "ok");
+}
+
+async function doConnect(): Promise<void> {
+  setBusy(true);
+  setStatus("Connecting...", "working");
+  const result = await sendMessage({ type: "connection/connect" });
+  setBusy(false);
+  if (!result.ok) {
+    setStatus(`Error: ${result.message}`, "error");
+    showToast(result.message ?? "Connect failed", "error");
+    showOnboarding("Agent service seems unavailable. Check installer/service status.");
+    await loadDiagnostics(true).catch(() => undefined);
+    return;
+  }
+  flowState.agentReady = true;
+  flowState.connected = true;
+  refreshSetupFlow();
+  hideOnboarding();
+  setStatus("Connected via local agent", "connected");
+  showToast("Connected", "ok");
+}
+
+async function doCheckAgent(showSuccessToast = true): Promise<boolean> {
+  setBusy(true);
+  setStatus("Checking agent...", "working");
+  const ok = await refreshConnectionStatus(showSuccessToast).catch(() => false);
+  if (!ok) {
+    showToast("Agent is still unavailable", "error");
+  }
+  setBusy(false);
+  return ok;
+}
+
+async function copySetupCommandWithToast(): Promise<void> {
+  try {
+    const copied = await copyTextToClipboard(getAgentSetupCommand());
+    if (!copied) {
+      throw new Error("Unable to access clipboard");
+    }
+    showToast("Setup command copied", "ok");
+  } catch (error: unknown) {
+    const text = error instanceof Error ? error.message : "Copy failed";
+    showToast(text, "error");
+  }
+}
+
+async function bootstrap(): Promise<void> {
+  refreshSetupFlow();
+  await refreshProfiles();
+  await refreshConnectionStatus();
+  renderDiagnostics(diagnosticsCache);
+  renderFixes([
+    {
+      title: "Load diagnostics",
+      detail: "Open Diagnostics to get actionable suggestions for your current environment.",
+      level: "info"
+    }
+  ]);
+}
+
+vlessInput?.addEventListener("input", () => {
+  validateVlessInput();
+  autofillNameFromVless();
+});
+
+profileSelect?.addEventListener("change", () => {
+  fillInputsFromProfile(getSelectedProfileId());
+});
+
+saveButton?.addEventListener("click", async () => {
+  await doSaveProfile();
 });
 
 useProfileButton?.addEventListener("click", async () => {
@@ -557,23 +673,7 @@ deleteProfileButton?.addEventListener("click", async () => {
 });
 
 connectButton?.addEventListener("click", async () => {
-  setBusy(true);
-  setStatus("Connecting...", "working");
-  const result = await sendMessage({ type: "connection/connect" });
-  setBusy(false);
-  if (!result.ok) {
-    setStatus(`Error: ${result.message}`, "error");
-    showToast(result.message ?? "Connect failed", "error");
-    showOnboarding("Agent service seems unavailable. Check installer/service status.");
-    await loadDiagnostics(true).catch(() => undefined);
-    return;
-  }
-  flowState.agentReady = true;
-  flowState.connected = true;
-  refreshSetupFlow();
-  hideOnboarding();
-  setStatus("Connected via local agent", "connected");
-  showToast("Connected", "ok");
+  await doConnect();
 });
 
 disconnectButton?.addEventListener("click", async () => {
@@ -593,27 +693,11 @@ disconnectButton?.addEventListener("click", async () => {
 });
 
 checkAgentButton?.addEventListener("click", async () => {
-  setBusy(true);
-  setStatus("Checking agent...", "working");
-  const ok = await refreshConnectionStatus(true).catch(() => false);
-  if (!ok) {
-    showToast("Agent is still unavailable", "error");
-  }
-  setBusy(false);
+  await doCheckAgent(true);
 });
 
 copyAgentCommandButton?.addEventListener("click", async () => {
-  const command = getAgentSetupCommand();
-  try {
-    const copied = await copyTextToClipboard(command);
-    if (!copied) {
-      throw new Error("Unable to access clipboard");
-    }
-    showToast("Setup command copied", "ok");
-  } catch (error: unknown) {
-    const text = error instanceof Error ? error.message : "Copy failed";
-    showToast(text, "error");
-  }
+  await copySetupCommandWithToast();
 });
 
 toggleDiagnosticsButton?.addEventListener("click", async () => {
@@ -622,25 +706,7 @@ toggleDiagnosticsButton?.addEventListener("click", async () => {
     diagnosticsPanel?.classList.add("hidden");
     return;
   }
-  setBusy(true);
-  setStatus("Loading diagnostics...", "working");
-  const ok = await loadDiagnostics(true).catch(() => false);
-  if (!ok) {
-    showToast("Diagnostics unavailable", "error");
-    setStatus("Failed to load diagnostics", "error");
-    setBusy(false);
-    return;
-  }
-  showToast("Diagnostics loaded", "ok");
-  const state = await sendMessage({ type: "connection/status" }).catch(() => ({ ok: false } as ResponsePayload));
-  if (state.ok) {
-    if (state.connected) {
-      setStatus("Connection active", "connected");
-    } else {
-      setStatus(state.message ? `Disconnected: ${state.message}` : "Disconnected", "disconnected");
-    }
-  }
-  setBusy(false);
+  await openDiagnosticsPanel();
 });
 
 copyDiagnosticsButton?.addEventListener("click", async () => {
@@ -673,6 +739,40 @@ fixesList?.addEventListener("click", async (event) => {
   } catch (error: unknown) {
     const text = error instanceof Error ? error.message : "Copy failed";
     showToast(text, "error");
+  }
+});
+
+quickPrimaryButton?.addEventListener("click", async () => {
+  switch (quickPrimaryAction) {
+    case "start-agent":
+      await copySetupCommandWithToast();
+      break;
+    case "save-profile":
+      await doSaveProfile();
+      break;
+    case "connect":
+      await doConnect();
+      break;
+    case "connected":
+      break;
+    default:
+      break;
+  }
+});
+
+quickSecondaryButton?.addEventListener("click", async () => {
+  switch (quickSecondaryAction) {
+    case "check-agent":
+      await doCheckAgent(true);
+      break;
+    case "copy-setup":
+      await copySetupCommandWithToast();
+      break;
+    case "open-diagnostics":
+      await openDiagnosticsPanel();
+      break;
+    default:
+      break;
   }
 });
 
