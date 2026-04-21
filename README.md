@@ -70,3 +70,9 @@ npm run package:windows
 ```
 
 The MSI installs and auto-starts `V2RayExtensionAgent` Windows service.
+
+## GitHub releases
+
+- CI workflow (`.github/workflows/ci.yml`) validates build/test and packaging on macOS and Windows.
+- Release workflow (`.github/workflows/release.yml`) builds `.pkg` and `.msi` and publishes a GitHub Release with artifacts and `SHA256SUMS.txt`.
+- Trigger release by pushing a tag like `v1.0.0`, or run workflow manually with `version` input.
