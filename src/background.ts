@@ -1,18 +1,7 @@
 import { connectAgent, disconnectAgent, getDiagnostics, getStatus, healthcheck, importProfile } from "./agent-client.js";
+import { normalizeStorage, type StorageShape, type StoredProfile } from "./profile-storage.js";
 import { clearProxy, setFixedHttpProxy } from "./proxy.js";
 import { parseVlessUrl } from "./vless.js";
-
-type StoredProfile = {
-  id: string;
-  name: string;
-  vlessUrl: string;
-  createdAt: number;
-};
-
-type StorageShape = {
-  profiles: StoredProfile[];
-  activeProfileId: string | null;
-};
 
 type RpcMessage =
   | { type: "profile/save"; vlessUrl: string; name?: string }
@@ -45,33 +34,23 @@ function makeProfileId(): string {
 }
 
 async function readStorage(): Promise<StorageShape> {
-  const raw = await chrome.storage.local.get(["profiles", "activeProfileId", "vlessUrl"]);
-  const profiles = Array.isArray(raw.profiles) ? (raw.profiles as StoredProfile[]) : [];
-  let activeProfileId = typeof raw.activeProfileId === "string" ? raw.activeProfileId : null;
-
-  // One-time migration from old single-profile key.
-  if (profiles.length === 0 && typeof raw.vlessUrl === "string" && raw.vlessUrl.trim()) {
-    parseVlessUrl(raw.vlessUrl);
-    const migrated: StoredProfile = {
+  const raw = await chrome.storage.local.get(["schemaVersion", "profiles", "activeProfileId", "vlessUrl"]);
+  const normalized = normalizeStorage(raw, (legacyVlessUrl) => {
+    parseVlessUrl(legacyVlessUrl);
+    return {
       id: makeProfileId(),
-      name: makeProfileName(raw.vlessUrl),
-      vlessUrl: raw.vlessUrl,
+      name: makeProfileName(legacyVlessUrl),
+      vlessUrl: legacyVlessUrl,
       createdAt: Date.now()
     };
-    await chrome.storage.local.set({
-      profiles: [migrated],
-      activeProfileId: migrated.id
-    });
+  });
+  if (normalized.needsWrite) {
+    await chrome.storage.local.set(normalized.state);
+  }
+  if (normalized.removeLegacyVless) {
     await chrome.storage.local.remove(["vlessUrl"]);
-    return { profiles: [migrated], activeProfileId: migrated.id };
   }
-
-  if (profiles.length > 0 && (!activeProfileId || !profiles.some((p) => p.id === activeProfileId))) {
-    activeProfileId = profiles[0].id;
-    await chrome.storage.local.set({ activeProfileId });
-  }
-
-  return { profiles, activeProfileId };
+  return normalized.state;
 }
 
 async function writeStorage(next: StorageShape): Promise<void> {
@@ -88,7 +67,7 @@ async function saveProfile(vlessUrl: string, customName?: string): Promise<RpcRe
     const updatedProfiles = preferredName
       ? state.profiles.map((p) => (p.id === existing.id ? { ...p, name: preferredName } : p))
       : state.profiles;
-    await writeStorage({ profiles: updatedProfiles, activeProfileId: existing.id });
+    await writeStorage({ ...state, profiles: updatedProfiles, activeProfileId: existing.id });
     await importProfile(vlessUrl);
     return {
       ok: true,
@@ -105,7 +84,7 @@ async function saveProfile(vlessUrl: string, customName?: string): Promise<RpcRe
     createdAt: Date.now()
   };
   const profiles = [created, ...state.profiles];
-  await writeStorage({ profiles, activeProfileId: created.id });
+  await writeStorage({ ...state, profiles, activeProfileId: created.id });
   await importProfile(vlessUrl);
   return {
     ok: true,
@@ -128,7 +107,7 @@ async function selectProfile(profileId: string): Promise<RpcResponse> {
   const state = await readStorage();
   const profile = state.profiles.find((p) => p.id === profileId);
   if (!profile) throw new Error("Profile not found");
-  await writeStorage({ profiles: state.profiles, activeProfileId: profile.id });
+  await writeStorage({ ...state, profiles: state.profiles, activeProfileId: profile.id });
   await importProfile(profile.vlessUrl);
   return {
     ok: true,
@@ -143,7 +122,7 @@ async function deleteProfile(profileId: string): Promise<RpcResponse> {
   const profiles = state.profiles.filter((p) => p.id !== profileId);
   const activeProfileId =
     state.activeProfileId === profileId ? (profiles.length > 0 ? profiles[0].id : null) : state.activeProfileId;
-  await writeStorage({ profiles, activeProfileId });
+  await writeStorage({ ...state, profiles, activeProfileId });
   if (activeProfileId) {
     const next = profiles.find((p) => p.id === activeProfileId);
     if (next) await importProfile(next.vlessUrl);
