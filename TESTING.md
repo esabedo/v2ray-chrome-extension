@@ -55,6 +55,12 @@ curl http://127.0.0.1:8777/v1/diagnostics
 - `/v1/status` has `"connected": true`
 - Browser traffic uses `127.0.0.1:10809` proxy.
 
+If you cannot disable another VPN:
+
+- rerun agent with `XRAY_OUTBOUND_INTERFACE=en0 npm run agent:run`,
+- then retest connect and traffic,
+- inspect `GET /v1/xray/logs` for Reality handshake errors.
+
 ## 4) Manual extension test (browser)
 
 1. Build extension: `npm run build`.

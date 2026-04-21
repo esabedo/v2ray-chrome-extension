@@ -56,6 +56,18 @@ Run local agent (mock disabled):
 npm run agent:run
 ```
 
+If another VPN is active, try forcing outbound via physical interface:
+
+```bash
+XRAY_OUTBOUND_INTERFACE=en0 npm run agent:run
+```
+
+Or force source address (if you know your local LAN IP):
+
+```bash
+XRAY_SEND_THROUGH=192.168.1.10 npm run agent:run
+```
+
 In a second terminal, check diagnostics:
 
 ```bash
