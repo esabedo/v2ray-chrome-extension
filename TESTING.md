@@ -4,9 +4,22 @@
 
 - Run `npm run test`.
 - Covered now: `vless://` parser validation.
-- Extend next: message routing in background and UI state helpers.
+- Covered now: storage schema migration and legacy profile normalization.
 
-## 2) Go Agent API smoke test
+## 2) Full local smoke stack (recommended)
+
+Single command that starts local agent, waits for health, runs API checks, then stops agent:
+
+```bash
+npm run smoke:stack
+```
+
+This command requires:
+
+- built Go agent binary (`npm run agent:build:go`),
+- installed `sing-box` binary in `agent/bin`.
+
+## 3) Go Agent API smoke test (agent already running)
 
 1. Start agent:
 
@@ -29,7 +42,7 @@ It verifies:
 - `GET /v1/status`
 - `POST /v1/disconnect`
 
-## 3) Diagnostics check (macOS)
+## 4) Diagnostics check (macOS)
 
 1. Run agent locally:
 
@@ -50,7 +63,7 @@ curl http://127.0.0.1:8777/v1/diagnostics
 - `/v1/status` has `"connected": true`
 - Browser traffic uses `127.0.0.1:10809` proxy.
 
-## 4) Manual extension test (browser)
+## 5) Manual extension test (browser)
 
 1. Build extension: `npm run build`.
 2. Open Chromium `chrome://extensions`.
@@ -60,15 +73,6 @@ curl http://127.0.0.1:8777/v1/diagnostics
 6. Paste a sample `vless://...` in popup.
 7. Click `Save`, then `Connect`, then `Disconnect`.
 8. Verify state text and no extension errors in service worker console.
-
-## 5) Planned E2E
-
-- Use Playwright with persistent context and loaded unpacked extension.
-- Scenarios:
-  - save profile success/fail,
-  - connect toggles proxy,
-  - disconnect resets to direct.
-- For network verification, add a test endpoint and compare observed external IP before/after connect.
 
 ## 6) Installer checks
 
@@ -88,3 +92,12 @@ npm run package:windows
 ```
 
 Verify generated file exists in `dist\install\windows\*.msi`.
+
+## 7) CI and release gates
+
+- CI (`.github/workflows/ci.yml`) runs:
+  - build + unit tests,
+  - Go agent build,
+  - `smoke:stack`,
+  - platform packaging (`.pkg` / `.msi`).
+- Release workflow (`.github/workflows/release.yml`) additionally verifies release asset layout and checksum entries before publishing.

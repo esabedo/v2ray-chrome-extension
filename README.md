@@ -15,6 +15,14 @@ Flow:
 3. On connect, Go agent starts `sing-box` and returns `httpProxyPort`.
 4. Extension enables `chrome.proxy` fixed server to `127.0.0.1:<port>`.
 
+## What is new in 0.2.0
+
+- Modernized popup UX (status pill, onboarding, guided diagnostics, quick actions).
+- Multi-profile management in popup (save/select/delete).
+- Schema-based storage migration for safer upgrades from legacy single-profile storage.
+- Cross-platform smoke stack checks in CI and release pipelines.
+- Release hardening with artifact structure/checksum verification before publishing.
+
 ## Local run
 
 ```bash
@@ -23,6 +31,18 @@ npm run build
 ```
 
 Load unpacked extension from `dist/` in Chromium.
+
+## Quick start (developer)
+
+```bash
+npm install
+npm run build
+npm run agent:build:go
+npm run singbox:install:macos
+npm run smoke:stack
+```
+
+Then load `dist/` in Chromium via `chrome://extensions` (Developer Mode).
 
 ## Real mode (macOS)
 
@@ -71,8 +91,20 @@ npm run package:windows
 
 The MSI installs and auto-starts `V2RayExtensionAgent` Windows service.
 
+## Upgrade notes (0.1.x -> 0.2.0)
+
+- On first run, extension storage is normalized to schema `v2` automatically.
+- Legacy single key `vlessUrl` is migrated to profile list format.
+- Active profile is repaired automatically if stale/missing.
+
 ## GitHub releases
 
 - CI workflow (`.github/workflows/ci.yml`) validates build/test and packaging on macOS and Windows.
-- Release workflow (`.github/workflows/release.yml`) builds `.pkg` and `.msi` and publishes a GitHub Release with artifacts and `SHA256SUMS.txt`.
+- Release workflow (`.github/workflows/release.yml`) builds `.pkg` and `.msi`, validates artifacts/checksums, and publishes GitHub Release assets with `SHA256SUMS.txt`.
 - Trigger release by pushing a tag like `v1.0.0`, or run workflow manually with `version` input.
+
+## Known limitations
+
+- This is not a "pure extension VPN": VLESS/Reality requires a local core (`sing-box`) managed by local agent.
+- Browser extension controls proxy only for browser traffic, not full-system routing.
+- Signed/notarized installers are not yet included in this repository workflow.
