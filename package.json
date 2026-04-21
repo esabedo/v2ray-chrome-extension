@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "agent:build:go": "mkdir -p go-agent/bin && /usr/local/go/bin/go -C go-agent build -o ./bin/v2ray-agent ./cmd/agent",
+    "agent:build:go": "node ./scripts/build-go-agent.mjs",
     "agent:run": "./scripts/run-agent-local.sh",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "clean": "rm -rf dist",
