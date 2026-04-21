@@ -16,7 +16,7 @@ async function call(path, init) {
 }
 
 const vlessUrl =
-  "vless://11111111-1111-1111-1111-111111111111@example.com:443?encryption=none&security=reality&type=tcp&sni=google.com&fp=chrome&pbk=test&sid=abcd#Smoke";
+  "vless://11111111-1111-1111-1111-111111111111@1.1.1.1:443?encryption=none&security=reality&type=tcp&sni=www.cloudflare.com&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd1234&spx=%2F&flow=xtls-rprx-vision#Smoke";
 
 async function run() {
   console.log(await call("/v1/health"));

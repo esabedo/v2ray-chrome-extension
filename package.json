@@ -11,6 +11,7 @@
     "package:macos": "./scripts/package-macos-pkg.sh",
     "package:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/package-windows-msi.ps1",
     "smoke:agent": "node scripts/smoke-agent.mjs",
+    "smoke:stack": "node scripts/smoke-stack.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "singbox:install:macos": "./scripts/install-singbox-macos.sh",
