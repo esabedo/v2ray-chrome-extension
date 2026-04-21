@@ -43,10 +43,11 @@ Copy-Item -Path $SingboxExe -Destination (Join-Path $StageDir "sing-box.exe") -F
 
 $OutMsi = Join-Path $DistDir ("v2ray-extension-agent-" + $Version + "-x64.msi")
 
-& wix build $WixFile `
-  -dVersion="$Version" `
-  -dStageDir="$StageDir" `
-  -o "$OutMsi"
+& wix build `
+  -d "Version=$Version" `
+  -d "StageDir=$StageDir" `
+  -o "$OutMsi" `
+  "$WixFile"
 
 if (-not (Test-Path $OutMsi)) {
   throw "MSI was not created at expected path: $OutMsi"
