@@ -115,6 +115,64 @@ body {
   color: #b6ceff;
 }
 
+.assistant {
+  border: 1px solid #2a3248;
+  border-radius: 8px;
+  background: #0f1728;
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+}
+
+.assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.assistant-header h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: #d8e3ff;
+}
+
+.assistant-next {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #a8b7de;
+}
+
+.assistant-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.assistant-chip {
+  border: 1px solid #37405a;
+  border-radius: 6px;
+  background: #151d2f;
+  color: #a6b5db;
+  font-size: 11px;
+  line-height: 1.3;
+  padding: 6px 7px;
+}
+
+.assistant-chip.done {
+  border-color: #2f7151;
+  background: #10221a;
+  color: #9ce8bf;
+}
+
+.assistant-chip.active {
+  border-color: #3d64c8;
+  background: #10203f;
+  color: #b6ceff;
+}
+
 h1 {
   margin: 0;
   font-size: 14px;

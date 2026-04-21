@@ -38,6 +38,19 @@
         </div>
       </section>
 
+      <section class="assistant">
+        <div class="assistant-header">
+          <h2>Setup Assistant</h2>
+          <button id="runFullCheckButton" type="button" class="btn btn-secondary btn-small">Run Full Check</button>
+        </div>
+        <p id="assistantNextStep" class="assistant-next">Checking current state...</p>
+        <div class="assistant-grid">
+          <span id="assistantAgent" class="assistant-chip pending">Agent: unknown</span>
+          <span id="assistantProfile" class="assistant-chip pending">Profile: unknown</span>
+          <span id="assistantConnection" class="assistant-chip pending">Connection: unknown</span>
+        </div>
+      </section>
+
       <section class="field">
         <label class="label" for="profileNameInput">Profile Name</label>
         <input id="profileNameInput" type="text" placeholder="Optional name" />

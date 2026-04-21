@@ -63,11 +63,17 @@ const stepProfile = document.querySelector<HTMLElement>("#stepProfile");
 const stepConnected = document.querySelector<HTMLElement>("#stepConnected");
 const quickPrimaryButton = document.querySelector<HTMLButtonElement>("#quickPrimaryButton");
 const quickSecondaryButton = document.querySelector<HTMLButtonElement>("#quickSecondaryButton");
+const runFullCheckButton = document.querySelector<HTMLButtonElement>("#runFullCheckButton");
+const assistantNextStep = document.querySelector<HTMLElement>("#assistantNextStep");
+const assistantAgent = document.querySelector<HTMLElement>("#assistantAgent");
+const assistantProfile = document.querySelector<HTMLElement>("#assistantProfile");
+const assistantConnection = document.querySelector<HTMLElement>("#assistantConnection");
 
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
 let diagnosticsCache = "Diagnostics are not loaded yet.";
 let lastFixCommands: string[] = [];
+let assistantLastError: string | null = null;
 let quickPrimaryAction: "start-agent" | "save-profile" | "connect" | "connected" = "start-agent";
 let quickSecondaryAction: "check-agent" | "copy-setup" | "open-diagnostics" = "check-agent";
 const flowState = {
@@ -88,6 +94,41 @@ function paintStep(node: HTMLElement | null, state: "pending" | "active" | "done
   node.classList.add(state);
 }
 
+function paintAssistantChip(node: HTMLElement | null, state: "pending" | "active" | "done", text: string): void {
+  if (!node) return;
+  node.classList.remove("pending", "active", "done");
+  node.classList.add(state);
+  node.textContent = text;
+}
+
+function refreshAssistantCard(): void {
+  if (!flowState.agentReady) {
+    paintAssistantChip(assistantAgent, "active", "Agent: not reachable");
+    paintAssistantChip(assistantProfile, "pending", "Profile: waiting for agent");
+    paintAssistantChip(assistantConnection, "pending", "Connection: blocked");
+    if (assistantNextStep) assistantNextStep.textContent = "Start local agent service, then click Check Agent.";
+    return;
+  }
+  paintAssistantChip(assistantAgent, "done", "Agent: reachable");
+
+  if (!flowState.profileReady) {
+    paintAssistantChip(assistantProfile, "active", "Profile: not saved");
+    paintAssistantChip(assistantConnection, "pending", "Connection: waiting for profile");
+    if (assistantNextStep) assistantNextStep.textContent = "Paste VLESS URL and click Save Profile.";
+    return;
+  }
+  paintAssistantChip(assistantProfile, "done", "Profile: ready");
+
+  if (!flowState.connected) {
+    paintAssistantChip(assistantConnection, "active", "Connection: disconnected");
+    const suffix = assistantLastError ? ` Last error: ${assistantLastError}.` : "";
+    if (assistantNextStep) assistantNextStep.textContent = `Everything is ready. Click Connect.${suffix}`;
+    return;
+  }
+  paintAssistantChip(assistantConnection, "done", "Connection: active");
+  if (assistantNextStep) assistantNextStep.textContent = "Setup complete. You can switch profiles or run diagnostics anytime.";
+}
+
 function refreshSetupFlow(): void {
   const doneCount = [flowState.agentReady, flowState.profileReady, flowState.connected].filter(Boolean).length;
   if (setupProgressText) setupProgressText.textContent = `${doneCount}/3 Ready`;
@@ -105,6 +146,7 @@ function refreshSetupFlow(): void {
     }
   }
   refreshQuickActions();
+  refreshAssistantCard();
 }
 
 function refreshQuickActions(): void {
@@ -171,6 +213,7 @@ function setBusy(busy: boolean): void {
   if (copyDiagnosticsButton) copyDiagnosticsButton.disabled = busy;
   if (quickPrimaryButton) quickPrimaryButton.disabled = busy || quickPrimaryAction === "connected";
   if (quickSecondaryButton) quickSecondaryButton.disabled = busy;
+  if (runFullCheckButton) runFullCheckButton.disabled = busy;
 }
 
 function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void {
@@ -363,6 +406,7 @@ async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
   if (!result.ok || !result.diagnostics) {
     flowState.agentReady = false;
     flowState.connected = false;
+    assistantLastError = result.message ?? "Diagnostics unavailable";
     renderDiagnostics(`Diagnostics unavailable.\n${result.message ?? "Unknown error"}`);
     renderFixes([
       {
@@ -379,6 +423,7 @@ async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
   flowState.agentReady = true;
   flowState.profileReady = result.diagnostics.profileExists;
   flowState.connected = result.diagnostics.connected;
+  assistantLastError = result.diagnostics.lastError ?? null;
   renderDiagnostics(formatDiagnostics(result.diagnostics));
   renderFixes(inferFixes(result.diagnostics));
   if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
@@ -487,12 +532,14 @@ async function refreshConnectionStatus(showToastOnSuccess = false): Promise<bool
     showOnboarding("Agent service seems unavailable. Check installer/service status.");
     flowState.agentReady = false;
     flowState.connected = false;
+    assistantLastError = state.message ?? "Agent is unreachable";
     refreshSetupFlow();
     await loadDiagnostics(true).catch(() => undefined);
     return false;
   }
   flowState.agentReady = true;
   flowState.connected = Boolean(state.connected);
+  assistantLastError = state.message ?? null;
   refreshSetupFlow();
   hideOnboarding();
   if (state.connected) {
@@ -569,6 +616,7 @@ async function doConnect(): Promise<void> {
   }
   flowState.agentReady = true;
   flowState.connected = true;
+  assistantLastError = null;
   refreshSetupFlow();
   hideOnboarding();
   setStatus("Connected via local agent", "connected");
@@ -597,6 +645,65 @@ async function copySetupCommandWithToast(): Promise<void> {
     const text = error instanceof Error ? error.message : "Copy failed";
     showToast(text, "error");
   }
+}
+
+async function runFullCheck(): Promise<void> {
+  setBusy(true);
+  setStatus("Running full check...", "working");
+
+  const [profilesResult, statusResult, diagnosticsResult] = await Promise.all([
+    sendMessage({ type: "profile/list" }).catch(() => ({ ok: false, message: "Profile check failed" } as ResponsePayload)),
+    sendMessage({ type: "connection/status" }).catch(() => ({ ok: false, message: "Agent status check failed" } as ResponsePayload)),
+    sendMessage({ type: "connection/diagnostics" }).catch(
+      () => ({ ok: false, message: "Diagnostics check failed" } as ResponsePayload)
+    )
+  ]);
+
+  if (profilesResult.ok) {
+    renderProfiles(profilesResult.profiles ?? [], profilesResult.activeProfileId ?? null);
+    flowState.profileReady = (profilesResult.profiles?.length ?? 0) > 0;
+  } else {
+    flowState.profileReady = false;
+  }
+
+  if (statusResult.ok) {
+    flowState.agentReady = true;
+    flowState.connected = Boolean(statusResult.connected);
+    hideOnboarding();
+  } else {
+    flowState.agentReady = false;
+    flowState.connected = false;
+    showOnboarding("Agent service seems unavailable. Check installer/service status.");
+  }
+
+  if (diagnosticsResult.ok && diagnosticsResult.diagnostics) {
+    renderDiagnostics(formatDiagnostics(diagnosticsResult.diagnostics));
+    renderFixes(inferFixes(diagnosticsResult.diagnostics));
+    assistantLastError = diagnosticsResult.diagnostics.lastError ?? null;
+  } else {
+    assistantLastError = diagnosticsResult.message ?? statusResult.message ?? null;
+  }
+
+  refreshSetupFlow();
+  setBusy(false);
+
+  if (!flowState.agentReady) {
+    setStatus("Full check: agent unavailable", "error");
+    showToast("Full check finished: agent unavailable", "error");
+    return;
+  }
+  if (!flowState.profileReady) {
+    setStatus("Full check: save a profile to continue", "disconnected");
+    showToast("Full check finished: profile required", "error");
+    return;
+  }
+  if (!flowState.connected) {
+    setStatus("Full check: ready to connect", "disconnected");
+    showToast("Full check finished", "ok");
+    return;
+  }
+  setStatus("Full check: all systems ready", "connected");
+  showToast("Full check finished", "ok");
 }
 
 async function bootstrap(): Promise<void> {
@@ -687,6 +794,7 @@ disconnectButton?.addEventListener("click", async () => {
     return;
   }
   flowState.connected = false;
+  assistantLastError = null;
   refreshSetupFlow();
   setStatus("Disconnected and proxy reset", "disconnected");
   showToast("Disconnected", "ok");
@@ -774,6 +882,10 @@ quickSecondaryButton?.addEventListener("click", async () => {
     default:
       break;
   }
+});
+
+runFullCheckButton?.addEventListener("click", async () => {
+  await runFullCheck();
 });
 
 void bootstrap();
