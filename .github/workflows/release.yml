@@ -148,6 +148,9 @@ jobs:
     needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Resolve version and tag
         id: meta
         shell: bash
