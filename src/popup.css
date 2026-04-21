@@ -222,6 +222,16 @@ body {
   color: #8e9fc8;
 }
 
+.bypass-editor {
+  display: grid;
+  gap: 6px;
+}
+
+.bypass-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 h1 {
   margin: 0;
   font-size: 14px;

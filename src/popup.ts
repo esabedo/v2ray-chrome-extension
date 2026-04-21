@@ -14,6 +14,7 @@ type ResponsePayload = {
   profiles?: StoredProfile[];
   activeProfileId?: string | null;
   diagnostics?: AgentDiagnostics;
+  bypassList?: string[];
 };
 
 type AgentDiagnostics = {
@@ -81,6 +82,8 @@ const assistantConnection = document.querySelector<HTMLElement>("#assistantConne
 const autoRetryToggle = document.querySelector<HTMLInputElement>("#autoRetryToggle");
 const retryAttemptsInput = document.querySelector<HTMLInputElement>("#retryAttemptsInput");
 const errorHint = document.querySelector<HTMLElement>("#errorHint");
+const bypassInput = document.querySelector<HTMLTextAreaElement>("#bypassInput");
+const saveBypassButton = document.querySelector<HTMLButtonElement>("#saveBypassButton");
 
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
@@ -241,6 +244,8 @@ function setBusy(busy: boolean): void {
   if (runFullCheckButton) runFullCheckButton.disabled = busy;
   if (autoRetryToggle) autoRetryToggle.disabled = busy;
   if (retryAttemptsInput) retryAttemptsInput.disabled = busy || !connectPolicy.autoRetry;
+  if (saveBypassButton) saveBypassButton.disabled = busy;
+  if (bypassInput) bypassInput.disabled = busy;
 }
 
 function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void {
@@ -341,6 +346,35 @@ async function loadConnectPolicy(): Promise<void> {
 
 async function persistConnectPolicy(): Promise<void> {
   await chrome.storage.local.set({ connectPolicy });
+}
+
+async function loadBypassList(): Promise<void> {
+  const result = await sendMessage({ type: "proxy/bypass/get" }).catch(
+    () => ({ ok: false, message: "Unable to load bypass list" } as ResponsePayload)
+  );
+  if (!result.ok) {
+    logEvent(`Bypass list load failed: ${result.message ?? "unknown error"}`);
+    return;
+  }
+  renderBypassList(result.bypassList ?? []);
+}
+
+async function saveBypassList(): Promise<void> {
+  const entries = parseBypassInput(bypassInput?.value ?? "");
+  setBusy(true);
+  const result = await sendMessage({ type: "proxy/bypass/set", entries }).catch(
+    () => ({ ok: false, message: "Unable to save bypass list" } as ResponsePayload)
+  );
+  setBusy(false);
+  if (!result.ok) {
+    setStatus(result.message ?? "Unable to save bypass list", "error");
+    showToast("Bypass update failed", "error");
+    logEvent(`Bypass list save failed: ${result.message ?? "unknown error"}`);
+    return;
+  }
+  renderBypassList(result.bypassList ?? entries);
+  showToast("Bypass list updated", "ok");
+  logEvent(`Bypass list updated (${(result.bypassList ?? entries).length} entries)`);
 }
 
 function classifyConnectError(message: string): { summary: string; detail: string } {
@@ -449,6 +483,23 @@ function parseImportPayload(raw: string): Array<{ name?: string; vlessUrl: strin
     throw new Error("No valid profiles found in JSON");
   }
   return normalized;
+}
+
+function parseBypassInput(raw: string): string[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(/\r?\n|,/g)
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+        .filter((item) => item !== "localhost" && item !== "127.0.0.1")
+    )
+  ).slice(0, 200);
+}
+
+function renderBypassList(entries: string[]): void {
+  if (!bypassInput) return;
+  bypassInput.value = entries.join("\n");
 }
 
 function formatDiagnostics(data: AgentDiagnostics): string {
@@ -905,6 +956,7 @@ async function runFullCheck(): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   await loadConnectPolicy();
+  await loadBypassList();
   refreshSetupFlow();
   await refreshProfiles();
   await refreshConnectionStatus();
@@ -1186,6 +1238,10 @@ retryAttemptsInput?.addEventListener("change", async () => {
   connectPolicy.attempts = clampAttempts(Number(retryAttemptsInput.value));
   renderConnectPolicy();
   await persistConnectPolicy();
+});
+
+saveBypassButton?.addEventListener("click", async () => {
+  await saveBypassList();
 });
 
 void bootstrap();

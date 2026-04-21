@@ -8,6 +8,8 @@ type RpcMessage =
   | { type: "profile/list" }
   | { type: "profile/select"; profileId: string }
   | { type: "profile/delete"; profileId: string }
+  | { type: "proxy/bypass/get" }
+  | { type: "proxy/bypass/set"; entries: string[] }
   | { type: "connection/connect" }
   | { type: "connection/disconnect" }
   | { type: "connection/status" }
@@ -20,7 +22,29 @@ type RpcResponse = {
   profiles?: StoredProfile[];
   activeProfileId?: string | null;
   diagnostics?: unknown;
+  bypassList?: string[];
 };
+
+const BYPASS_STORAGE_KEY = "proxyBypassList";
+
+function normalizeBypassEntries(entries: string[]): string[] {
+  const cleaned = entries
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((entry) => entry !== "localhost" && entry !== "127.0.0.1");
+  return Array.from(new Set(cleaned)).slice(0, 200);
+}
+
+async function readBypassList(): Promise<string[]> {
+  const raw = await chrome.storage.local.get([BYPASS_STORAGE_KEY]);
+  const entries = Array.isArray(raw[BYPASS_STORAGE_KEY]) ? (raw[BYPASS_STORAGE_KEY] as string[]) : [];
+  return normalizeBypassEntries(entries);
+}
+
+async function writeBypassList(entries: string[]): Promise<void> {
+  const normalized = normalizeBypassEntries(entries);
+  await chrome.storage.local.set({ [BYPASS_STORAGE_KEY]: normalized });
+}
 
 function makeProfileName(vlessUrl: string): string {
   const parsed = parseVlessUrl(vlessUrl);
@@ -151,7 +175,8 @@ async function connect(): Promise<RpcResponse> {
   await healthcheck();
   await importProfile(active.vlessUrl);
   const result = await connectAgent();
-  await setFixedHttpProxy(result.httpProxyPort);
+  const bypassList = await readBypassList();
+  await setFixedHttpProxy(result.httpProxyPort, bypassList);
   return { ok: true, connected: true, message: "Connected via local agent" };
 }
 
@@ -177,6 +202,27 @@ async function diagnostics(): Promise<RpcResponse> {
   };
 }
 
+async function getBypassList(): Promise<RpcResponse> {
+  return {
+    ok: true,
+    bypassList: await readBypassList()
+  };
+}
+
+async function setBypassList(entries: string[]): Promise<RpcResponse> {
+  await writeBypassList(entries);
+  const bypassList = await readBypassList();
+  const s = await getStatus().catch(() => ({ connected: false, httpProxyPort: 10809 }));
+  if (s.connected) {
+    await setFixedHttpProxy(s.httpProxyPort, bypassList);
+  }
+  return {
+    ok: true,
+    bypassList,
+    message: "Bypass list updated"
+  };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.info("V2Ray extension installed");
 });
@@ -195,6 +241,12 @@ chrome.runtime.onMessage.addListener((message: RpcMessage, _sender, sendResponse
         return;
       case "profile/delete":
         sendResponse(await deleteProfile(message.profileId));
+        return;
+      case "proxy/bypass/get":
+        sendResponse(await getBypassList());
+        return;
+      case "proxy/bypass/set":
+        sendResponse(await setBypassList(message.entries));
         return;
       case "connection/connect":
         sendResponse(await connect());

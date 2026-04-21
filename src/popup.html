@@ -63,6 +63,13 @@
           </label>
         </div>
         <p id="errorHint" class="policy-hint">Connection errors will be classified automatically.</p>
+        <div class="bypass-editor">
+          <label class="label" for="bypassInput">Bypass Sites (one per line)</label>
+          <textarea id="bypassInput" rows="3" placeholder="example.com&#10;*.internal.local"></textarea>
+          <div class="bypass-actions">
+            <button id="saveBypassButton" type="button" class="btn btn-secondary btn-small">Save Bypass</button>
+          </div>
+        </div>
       </section>
 
       <section class="field">

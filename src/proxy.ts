@@ -1,4 +1,11 @@
-export async function setFixedHttpProxy(port: number): Promise<void> {
+const DEFAULT_BYPASS = ["localhost", "127.0.0.1"];
+
+export async function setFixedHttpProxy(port: number, bypassList: string[] = []): Promise<void> {
+  const normalized = Array.from(
+    new Set(
+      [...DEFAULT_BYPASS, ...bypassList.map((item) => item.trim()).filter(Boolean)].map((item) => item.toLowerCase())
+    )
+  );
   await chrome.proxy.settings.set({
     value: {
       mode: "fixed_servers",
@@ -8,7 +15,7 @@ export async function setFixedHttpProxy(port: number): Promise<void> {
           host: "127.0.0.1",
           port
         },
-        bypassList: ["localhost", "127.0.0.1"]
+        bypassList: normalized
       }
     },
     scope: "regular"
