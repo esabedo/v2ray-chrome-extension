@@ -28,7 +28,34 @@ It verifies:
 - `GET /v1/status`
 - `POST /v1/disconnect`
 
-## 3) Manual extension test (browser)
+## 3) Real xray diagnostics test (macOS)
+
+1. Install xray:
+
+```bash
+npm run xray:install:macos
+```
+
+2. Run agent locally:
+
+```bash
+npm run agent:run
+```
+
+3. Verify diagnostics:
+
+```bash
+curl http://127.0.0.1:8777/v1/diagnostics
+```
+
+4. Import real profile and connect via extension popup.
+
+5. Confirm:
+
+- `/v1/status` has `"connected": true`
+- Browser traffic uses `127.0.0.1:10809` proxy.
+
+## 4) Manual extension test (browser)
 
 1. Build extension: `npm run build`.
 2. Open Chromium `chrome://extensions`.
@@ -39,7 +66,7 @@ It verifies:
 7. Click `Save`, then `Connect`, then `Disconnect`.
 8. Verify state text and no extension errors in service worker console.
 
-## 4) Planned E2E
+## 5) Planned E2E
 
 - Use Playwright with persistent context and loaded unpacked extension.
 - Scenarios:

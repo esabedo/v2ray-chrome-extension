@@ -20,6 +20,7 @@ const vlessUrl =
 
 async function run() {
   console.log(await call("/v1/health"));
+  console.log(await call("/v1/diagnostics"));
   console.log(await call("/v1/profile", { method: "POST", body: JSON.stringify({ vlessUrl }) }));
   console.log(await call("/v1/connect", { method: "POST" }));
   console.log(await call("/v1/status"));

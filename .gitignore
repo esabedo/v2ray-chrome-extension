@@ -5,3 +5,5 @@ coverage/
 *.log
 agent/.venv/
 agent/__pycache__/
+agent/bin/xray
+agent/runtime/

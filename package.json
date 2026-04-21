@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "agent:run": "./scripts/run-agent-local.sh",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "clean": "rm -rf dist",
     "smoke:agent": "node scripts/smoke-agent.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "xray:install:macos": "./scripts/install-xray-macos.sh"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.310",
