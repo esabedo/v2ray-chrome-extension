@@ -124,6 +124,8 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
 
 def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
     stream_settings: dict[str, Any] = {"network": profile["network"]}
+    if profile["network"] == "tcp":
+        stream_settings["tcpSettings"] = {"header": {"type": "none"}}
     security = profile["security"]
     if security and security != "none":
         stream_settings["security"] = security
@@ -141,6 +143,7 @@ def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
         )
 
     outbound = {
+        "tag": "proxy",
         "protocol": "vless",
         "settings": {
             "vnext": [
@@ -173,7 +176,7 @@ def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
         )
 
     return {
-        "log": {"loglevel": "warning"},
+        "log": {"loglevel": "info"},
         "inbounds": [
             {
                 "tag": "socks-in",
@@ -181,6 +184,11 @@ def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
                 "port": SOCKS_PORT,
                 "protocol": "socks",
                 "settings": {"udp": True},
+                "sniffing": {
+                    "enabled": True,
+                    "routeOnly": False,
+                    "destOverride": ["tls", "http", "quic"],
+                },
             },
             {
                 "tag": "http-in",
@@ -192,8 +200,8 @@ def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
         ],
         "outbounds": [
             outbound,
-            {"tag": "direct", "protocol": "freedom", "settings": {}},
             {"tag": "block", "protocol": "blackhole", "settings": {}},
+            {"tag": "direct", "protocol": "freedom", "settings": {}},
         ],
     }
 
