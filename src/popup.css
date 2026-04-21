@@ -323,6 +323,56 @@ select:focus {
   padding: 8px;
 }
 
+.fixes-panel {
+  border: 1px solid #252f45;
+  border-radius: 7px;
+  background: #0e1523;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.fixes-panel h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  color: #d3ddfa;
+}
+
+.fixes-list {
+  display: grid;
+  gap: 6px;
+}
+
+.fix-item {
+  border: 1px solid #2d3851;
+  border-radius: 7px;
+  background: #121b2f;
+  padding: 7px;
+  display: grid;
+  gap: 5px;
+}
+
+.fix-title {
+  margin: 0;
+  font-size: 11px;
+  color: #e8efff;
+}
+
+.fix-detail {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #aebde4;
+}
+
+.fixes-empty {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #8f9fc8;
+}
+
 .toast-host {
   position: absolute;
   right: 12px;

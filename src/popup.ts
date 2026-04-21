@@ -29,6 +29,13 @@ type AgentDiagnostics = {
   xrayStderrTail?: string[];
 };
 
+type FixSuggestion = {
+  title: string;
+  detail: string;
+  command?: string;
+  level?: "warn" | "info";
+};
+
 const onboardingCard = document.querySelector<HTMLElement>("#onboardingCard");
 const onboardingText = document.querySelector<HTMLElement>("#onboardingText");
 const checkAgentButton = document.querySelector<HTMLButtonElement>("#checkAgentButton");
@@ -37,6 +44,7 @@ const toggleDiagnosticsButton = document.querySelector<HTMLButtonElement>("#togg
 const copyDiagnosticsButton = document.querySelector<HTMLButtonElement>("#copyDiagnosticsButton");
 const diagnosticsPanel = document.querySelector<HTMLElement>("#diagnosticsPanel");
 const diagnosticsText = document.querySelector<HTMLElement>("#diagnosticsText");
+const fixesList = document.querySelector<HTMLElement>("#fixesList");
 const toastHost = document.querySelector<HTMLElement>("#toastHost");
 const profileNameInput = document.querySelector<HTMLInputElement>("#profileNameInput");
 const vlessInput = document.querySelector<HTMLTextAreaElement>("#vlessInput");
@@ -53,6 +61,7 @@ const statusPill = document.querySelector<HTMLElement>("#statusPill");
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
 let diagnosticsCache = "Diagnostics are not loaded yet.";
+let lastFixCommands: string[] = [];
 
 function setPill(kind: StatusKind, label: string): void {
   if (!statusPill) return;
@@ -125,6 +134,14 @@ function getAgentSetupCommand(): string {
   return "npm run agent:run";
 }
 
+function getPortInspectCommand(port: number): string {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("windows")) {
+    return `netstat -ano | findstr :${port}`;
+  }
+  return `lsof -nP -iTCP:${port} -sTCP:LISTEN`;
+}
+
 async function copyTextToClipboard(text: string): Promise<boolean> {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -171,14 +188,113 @@ function formatDiagnostics(data: AgentDiagnostics): string {
   return lines.join("\n");
 }
 
+function inferFixes(data: AgentDiagnostics): FixSuggestion[] {
+  const fixes: FixSuggestion[] = [];
+  const lastError = (data.lastError || "").toLowerCase();
+
+  if (!data.profileExists) {
+    fixes.push({
+      title: "No saved profile",
+      detail: "Paste a valid VLESS URL and click Save before connecting.",
+      level: "warn"
+    });
+  }
+
+  if (!data.singboxConfigExists && data.profileExists) {
+    fixes.push({
+      title: "Core config is missing",
+      detail: "Re-select or re-save the active profile to regenerate runtime config.",
+      level: "warn"
+    });
+  }
+
+  if (lastError.includes("binary not found") || lastError.includes("no such file")) {
+    fixes.push({
+      title: "Core binary is not installed",
+      detail: "Install sing-box and run local agent service.",
+      command: getAgentSetupCommand(),
+      level: "warn"
+    });
+  }
+
+  if (lastError.includes("port 127.0.0.1")) {
+    fixes.push({
+      title: "Local proxy port is occupied",
+      detail: "Check which process is using the port and stop conflicting service.",
+      command: getPortInspectCommand(data.httpProxyPort),
+      level: "warn"
+    });
+  }
+
+  if (!data.connected && lastError === "" && data.profileExists) {
+    fixes.push({
+      title: "Agent is ready but disconnected",
+      detail: "Try Connect in popup. If it fails, run health check and collect diagnostics.",
+      command: "curl -s http://127.0.0.1:8777/v1/health",
+      level: "info"
+    });
+  }
+
+  if (fixes.length === 0) {
+    fixes.push({
+      title: "No critical issues detected",
+      detail: "If connection still fails, copy diagnostics and send it for review.",
+      level: "info"
+    });
+  }
+
+  return fixes;
+}
+
+function renderFixes(fixes: FixSuggestion[]): void {
+  lastFixCommands = fixes.map((fix) => fix.command || "");
+  if (!fixesList) return;
+  fixesList.textContent = "";
+  for (let i = 0; i < fixes.length; i += 1) {
+    const fix = fixes[i];
+    const item = document.createElement("article");
+    item.className = "fix-item";
+
+    const title = document.createElement("p");
+    title.className = "fix-title";
+    title.textContent = fix.title;
+
+    const detail = document.createElement("p");
+    detail.className = "fix-detail";
+    detail.textContent = fix.detail;
+
+    item.append(title, detail);
+
+    if (fix.command) {
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "btn btn-secondary btn-small";
+      copyBtn.textContent = "Copy Command";
+      copyBtn.dataset.fixCommandIndex = String(i);
+      item.append(copyBtn);
+    }
+
+    fixesList.append(item);
+  }
+}
+
 async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
   const result = await sendMessage({ type: "connection/diagnostics" });
   if (!result.ok || !result.diagnostics) {
     renderDiagnostics(`Diagnostics unavailable.\n${result.message ?? "Unknown error"}`);
+    renderFixes([
+      {
+        title: "Diagnostics endpoint unavailable",
+        detail: "Start local agent service and run Check Agent from onboarding.",
+        command: getAgentSetupCommand(),
+        level: "warn"
+      }
+    ]);
     if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
     return false;
   }
   renderDiagnostics(formatDiagnostics(result.diagnostics));
+  renderFixes(inferFixes(result.diagnostics));
   if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
   return true;
 }
@@ -296,6 +412,13 @@ async function bootstrap(): Promise<void> {
   await refreshProfiles();
   await refreshConnectionStatus();
   renderDiagnostics(diagnosticsCache);
+  renderFixes([
+    {
+      title: "Load diagnostics",
+      detail: "Open Diagnostics to get actionable suggestions for your current environment.",
+      level: "info"
+    }
+  ]);
 }
 
 vlessInput?.addEventListener("input", () => {
@@ -460,6 +583,26 @@ copyDiagnosticsButton?.addEventListener("click", async () => {
       throw new Error("Unable to copy diagnostics");
     }
     showToast("Diagnostics copied", "ok");
+  } catch (error: unknown) {
+    const text = error instanceof Error ? error.message : "Copy failed";
+    showToast(text, "error");
+  }
+});
+
+fixesList?.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const idxText = target.dataset.fixCommandIndex;
+  if (!idxText) return;
+  const index = Number(idxText);
+  const command = Number.isFinite(index) ? lastFixCommands[index] : "";
+  if (!command) return;
+  try {
+    const copied = await copyTextToClipboard(command);
+    if (!copied) {
+      throw new Error("Unable to copy command");
+    }
+    showToast("Fix command copied", "ok");
   } catch (error: unknown) {
     const text = error instanceof Error ? error.message : "Copy failed";
     showToast(text, "error");
