@@ -22,6 +22,18 @@
         <span id="statusPill" class="status-pill status-idle">Idle</span>
       </header>
 
+      <section class="setup-flow" aria-live="polite">
+        <div class="setup-flow-header">
+          <span>Setup Progress</span>
+          <span id="setupProgressText">0/3 Ready</span>
+        </div>
+        <div class="setup-flow-steps">
+          <span id="stepAgent" class="setup-step pending">1. Agent</span>
+          <span id="stepProfile" class="setup-step pending">2. Profile</span>
+          <span id="stepConnected" class="setup-step pending">3. Connected</span>
+        </div>
+      </section>
+
       <section class="field">
         <label class="label" for="profileNameInput">Profile Name</label>
         <input id="profileNameInput" type="text" placeholder="Optional name" />

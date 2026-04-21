@@ -57,16 +57,51 @@ const useProfileButton = document.querySelector<HTMLButtonElement>("#useProfileB
 const deleteProfileButton = document.querySelector<HTMLButtonElement>("#deleteProfileButton");
 const statusNode = document.querySelector<HTMLElement>("#status");
 const statusPill = document.querySelector<HTMLElement>("#statusPill");
+const setupProgressText = document.querySelector<HTMLElement>("#setupProgressText");
+const stepAgent = document.querySelector<HTMLElement>("#stepAgent");
+const stepProfile = document.querySelector<HTMLElement>("#stepProfile");
+const stepConnected = document.querySelector<HTMLElement>("#stepConnected");
 
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
 let diagnosticsCache = "Diagnostics are not loaded yet.";
 let lastFixCommands: string[] = [];
+const flowState = {
+  agentReady: false,
+  profileReady: false,
+  connected: false
+};
 
 function setPill(kind: StatusKind, label: string): void {
   if (!statusPill) return;
   statusPill.textContent = label;
   statusPill.className = `status-pill status-${kind}`;
+}
+
+function paintStep(node: HTMLElement | null, state: "pending" | "active" | "done"): void {
+  if (!node) return;
+  node.classList.remove("pending", "active", "done");
+  node.classList.add(state);
+}
+
+function refreshSetupFlow(): void {
+  const doneCount = [flowState.agentReady, flowState.profileReady, flowState.connected].filter(Boolean).length;
+  if (setupProgressText) setupProgressText.textContent = `${doneCount}/3 Ready`;
+
+  paintStep(stepAgent, flowState.agentReady ? "done" : "active");
+  if (!flowState.agentReady) {
+    paintStep(stepProfile, "pending");
+    paintStep(stepConnected, "pending");
+    return;
+  }
+
+  paintStep(stepProfile, flowState.profileReady ? "done" : "active");
+  if (!flowState.profileReady) {
+    paintStep(stepConnected, "pending");
+    return;
+  }
+
+  paintStep(stepConnected, flowState.connected ? "done" : "active");
 }
 
 function setStatus(text: string, kind: StatusKind = "idle"): void {
@@ -281,6 +316,8 @@ function renderFixes(fixes: FixSuggestion[]): void {
 async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
   const result = await sendMessage({ type: "connection/diagnostics" });
   if (!result.ok || !result.diagnostics) {
+    flowState.agentReady = false;
+    flowState.connected = false;
     renderDiagnostics(`Diagnostics unavailable.\n${result.message ?? "Unknown error"}`);
     renderFixes([
       {
@@ -291,11 +328,16 @@ async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
       }
     ]);
     if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
+    refreshSetupFlow();
     return false;
   }
+  flowState.agentReady = true;
+  flowState.profileReady = result.diagnostics.profileExists;
+  flowState.connected = result.diagnostics.connected;
   renderDiagnostics(formatDiagnostics(result.diagnostics));
   renderFixes(inferFixes(result.diagnostics));
   if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
+  refreshSetupFlow();
   return true;
 }
 
@@ -384,9 +426,13 @@ async function refreshProfiles(): Promise<void> {
   if (!result.ok) {
     setStatus(result.message ?? "Unable to load profiles", "error");
     showToast(result.message ?? "Unable to load profiles", "error");
+    flowState.profileReady = false;
+    refreshSetupFlow();
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+  flowState.profileReady = (result.profiles?.length ?? 0) > 0;
+  refreshSetupFlow();
 }
 
 async function refreshConnectionStatus(showToastOnSuccess = false): Promise<boolean> {
@@ -394,9 +440,15 @@ async function refreshConnectionStatus(showToastOnSuccess = false): Promise<bool
   if (!state.ok) {
     setStatus(state.message ?? "Unable to fetch status", "error");
     showOnboarding("Agent service seems unavailable. Check installer/service status.");
+    flowState.agentReady = false;
+    flowState.connected = false;
+    refreshSetupFlow();
     await loadDiagnostics(true).catch(() => undefined);
     return false;
   }
+  flowState.agentReady = true;
+  flowState.connected = Boolean(state.connected);
+  refreshSetupFlow();
   hideOnboarding();
   if (state.connected) {
     setStatus("Connection active", "connected");
@@ -409,6 +461,7 @@ async function refreshConnectionStatus(showToastOnSuccess = false): Promise<bool
 }
 
 async function bootstrap(): Promise<void> {
+  refreshSetupFlow();
   await refreshProfiles();
   await refreshConnectionStatus();
   renderDiagnostics(diagnosticsCache);
@@ -451,6 +504,8 @@ saveButton?.addEventListener("click", async () => {
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+  flowState.profileReady = (result.profiles?.length ?? 0) > 0;
+  refreshSetupFlow();
   setStatus("Profile saved and selected", "idle");
   showToast("Profile saved", "ok");
 });
@@ -468,6 +523,8 @@ useProfileButton?.addEventListener("click", async () => {
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+  flowState.profileReady = (result.profiles?.length ?? 0) > 0;
+  refreshSetupFlow();
   setStatus("Active profile updated", "idle");
   showToast("Profile switched", "ok");
 });
@@ -490,6 +547,11 @@ deleteProfileButton?.addEventListener("click", async () => {
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+  flowState.profileReady = (result.profiles?.length ?? 0) > 0;
+  if (!flowState.profileReady) {
+    flowState.connected = false;
+  }
+  refreshSetupFlow();
   setStatus("Profile removed", "disconnected");
   showToast("Profile deleted", "ok");
 });
@@ -506,6 +568,9 @@ connectButton?.addEventListener("click", async () => {
     await loadDiagnostics(true).catch(() => undefined);
     return;
   }
+  flowState.agentReady = true;
+  flowState.connected = true;
+  refreshSetupFlow();
   hideOnboarding();
   setStatus("Connected via local agent", "connected");
   showToast("Connected", "ok");
@@ -521,6 +586,8 @@ disconnectButton?.addEventListener("click", async () => {
     showToast(result.message ?? "Disconnect failed", "error");
     return;
   }
+  flowState.connected = false;
+  refreshSetupFlow();
   setStatus("Disconnected and proxy reset", "disconnected");
   showToast("Disconnected", "ok");
 });
