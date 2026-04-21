@@ -9,10 +9,12 @@
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "clean": "rm -rf dist",
     "package:macos": "./scripts/package-macos-pkg.sh",
+    "package:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/package-windows-msi.ps1",
     "smoke:agent": "node scripts/smoke-agent.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "singbox:install:macos": "./scripts/install-singbox-macos.sh"
+    "singbox:install:macos": "./scripts/install-singbox-macos.sh",
+    "singbox:install:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/install-singbox-windows.ps1"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.310",

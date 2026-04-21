@@ -43,3 +43,26 @@ If Go is installed, you can build native local agent binary:
 ```bash
 npm run agent:build:go
 ```
+
+Build macOS installer package:
+
+```bash
+npm run package:macos
+```
+
+## Windows packaging
+
+On Windows host:
+
+1. Install Go, WiX v4 (CLI `wix` in PATH).
+2. Install sing-box binary:
+
+```powershell
+npm run singbox:install:windows
+```
+
+3. Build MSI:
+
+```powershell
+npm run package:windows
+```

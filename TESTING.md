@@ -69,3 +69,22 @@ curl http://127.0.0.1:8777/v1/diagnostics
   - connect toggles proxy,
   - disconnect resets to direct.
 - For network verification, add a test endpoint and compare observed external IP before/after connect.
+
+## 6) Installer checks
+
+macOS:
+
+```bash
+npm run package:macos
+```
+
+Verify generated file exists in `dist/install/macos/*.pkg`.
+
+Windows (on Windows host):
+
+```powershell
+npm run singbox:install:windows
+npm run package:windows
+```
+
+Verify generated file exists in `dist\install\windows\*.msi`.

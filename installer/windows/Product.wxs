@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="V2Ray Extension Agent"
+    Manufacturer="V2Ray Extension"
+    Version="$(var.Version)"
+    UpgradeCode="1545DD6C-618B-4E4E-A008-6C2A12866708"
+    InstallerVersion="500"
+    Scope="perMachine"
+    Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of V2Ray Extension Agent is already installed." />
+    <MediaTemplate />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="V2Ray Extension Agent">
+        <Component Id="cmpAgentExe" Guid="*">
+          <File Id="filAgentExe" Source="$(var.StageDir)\v2ray-agent.exe" KeyPath="yes" />
+        </Component>
+
+        <Component Id="cmpSingboxExe" Guid="*">
+          <File Id="filSingboxExe" Source="$(var.StageDir)\sing-box.exe" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="V2Ray Extension Agent" Level="1">
+      <ComponentRef Id="cmpAgentExe" />
+      <ComponentRef Id="cmpSingboxExe" />
+    </Feature>
+  </Package>
+</Wix>
