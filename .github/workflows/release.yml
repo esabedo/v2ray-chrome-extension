@@ -60,6 +60,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Smoke stack
+        run: npm run smoke:stack
+
       - name: Build macOS package
         run: ./scripts/package-macos-pkg.sh "${{ steps.meta.outputs.version }}"
 
@@ -121,6 +124,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Smoke stack
+        run: npm run smoke:stack
+
       - name: Build MSI package
         shell: pwsh
         run: |
@@ -171,6 +177,9 @@ jobs:
         run: |
           cd release-assets
           sha256sum * > SHA256SUMS.txt
+
+      - name: Verify release assets
+        run: node scripts/verify-release-assets.mjs release-assets
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

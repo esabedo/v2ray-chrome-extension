@@ -49,6 +49,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Smoke stack (macOS)
+        if: runner.os == 'macOS'
+        run: npm run smoke:stack
+
       - name: Package macOS PKG
         if: runner.os == 'macOS'
         run: npm run package:macos
@@ -73,6 +77,10 @@ jobs:
         run: npm run singbox:install:windows
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Smoke stack (Windows)
+        if: runner.os == 'Windows'
+        run: npm run smoke:stack
 
       - name: Package Windows MSI
         if: runner.os == 'Windows'
