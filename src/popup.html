@@ -8,10 +8,15 @@
   </head>
   <body>
     <main class="app">
-      <h1>V2Ray</h1>
-      <p class="hint">Extension scaffold is ready</p>
-      <button id="pingButton" type="button">Ping background</button>
-      <pre id="status"></pre>
+      <h1>V2Ray Proxy</h1>
+      <label class="label" for="vlessInput">VLESS URL</label>
+      <textarea id="vlessInput" rows="4" placeholder="vless://..."></textarea>
+      <div class="row">
+        <button id="saveButton" type="button">Save</button>
+        <button id="connectButton" type="button">Connect</button>
+        <button id="disconnectButton" type="button">Disconnect</button>
+      </div>
+      <pre id="status">Idle</pre>
     </main>
     <script type="module" src="./popup.js"></script>
   </body>
