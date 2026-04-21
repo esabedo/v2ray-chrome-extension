@@ -56,6 +56,7 @@ def parse_vless(vless_url: str) -> dict[str, Any]:
         "fp": query.get("fp", [None])[0],
         "pbk": query.get("pbk", [None])[0],
         "sid": query.get("sid", [None])[0],
+        "spx": query.get("spx", [None])[0],
         "flow": query.get("flow", [None])[0],
         "remark": unquote(parsed.fragment) if parsed.fragment else None,
         "raw": vless_url.strip(),
@@ -79,6 +80,7 @@ def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
             "fingerprint": profile["fp"],
             "publicKey": profile["pbk"],
             "shortId": profile["sid"],
+            "spiderX": profile["spx"],
             }
         )
 
