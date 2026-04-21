@@ -78,6 +78,12 @@ h1 {
   gap: 6px;
 }
 
+.profile-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
 .label {
   font-size: 11px;
   font-weight: 600;
@@ -99,6 +105,22 @@ textarea {
 }
 
 textarea:focus {
+  outline: none;
+  border-color: #4f79ff;
+  box-shadow: 0 0 0 1px #3559c6;
+}
+
+select {
+  width: 100%;
+  border: 1px solid #2a2f41;
+  border-radius: 7px;
+  background: #131722;
+  color: #e4ebff;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+select:focus {
   outline: none;
   border-color: #4f79ff;
   box-shadow: 0 0 0 1px #3559c6;

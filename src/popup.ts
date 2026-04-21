@@ -1,13 +1,25 @@
+type StoredProfile = {
+  id: string;
+  name: string;
+  vlessUrl: string;
+  createdAt: number;
+};
+
 type ResponsePayload = {
   ok: boolean;
   message?: string;
   connected?: boolean;
+  profiles?: StoredProfile[];
+  activeProfileId?: string | null;
 };
 
 const vlessInput = document.querySelector<HTMLTextAreaElement>("#vlessInput");
+const profileSelect = document.querySelector<HTMLSelectElement>("#profileSelect");
 const saveButton = document.querySelector<HTMLButtonElement>("#saveButton");
 const connectButton = document.querySelector<HTMLButtonElement>("#connectButton");
 const disconnectButton = document.querySelector<HTMLButtonElement>("#disconnectButton");
+const useProfileButton = document.querySelector<HTMLButtonElement>("#useProfileButton");
+const deleteProfileButton = document.querySelector<HTMLButtonElement>("#deleteProfileButton");
 const statusNode = document.querySelector<HTMLElement>("#status");
 const statusPill = document.querySelector<HTMLElement>("#statusPill");
 
@@ -35,17 +47,55 @@ function setBusy(busy: boolean): void {
   if (saveButton) saveButton.disabled = busy;
   if (connectButton) connectButton.disabled = busy;
   if (disconnectButton) disconnectButton.disabled = busy;
+  if (useProfileButton) useProfileButton.disabled = busy;
+  if (deleteProfileButton) deleteProfileButton.disabled = busy;
 }
 
 async function sendMessage(message: object): Promise<ResponsePayload> {
   return chrome.runtime.sendMessage(message);
 }
 
-async function bootstrap(): Promise<void> {
-  const stored = await chrome.storage.local.get(["vlessUrl"]);
-  if (vlessInput && typeof stored.vlessUrl === "string") {
-    vlessInput.value = stored.vlessUrl;
+function getSelectedProfileId(): string | null {
+  return profileSelect?.value || null;
+}
+
+function renderProfiles(profiles: StoredProfile[], activeProfileId: string | null | undefined): void {
+  if (!profileSelect) return;
+  profileSelect.textContent = "";
+  if (profiles.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No profiles yet";
+    option.disabled = true;
+    option.selected = true;
+    profileSelect.append(option);
+    if (useProfileButton) useProfileButton.disabled = true;
+    if (deleteProfileButton) deleteProfileButton.disabled = true;
+    return;
   }
+
+  for (const profile of profiles) {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = profile.name;
+    option.selected = profile.id === activeProfileId;
+    profileSelect.append(option);
+  }
+  if (useProfileButton) useProfileButton.disabled = false;
+  if (deleteProfileButton) deleteProfileButton.disabled = false;
+}
+
+async function refreshProfiles(): Promise<void> {
+  const result = await sendMessage({ type: "profile/list" });
+  if (!result.ok) {
+    setStatus(result.message ?? "Unable to load profiles", "error");
+    return;
+  }
+  renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+}
+
+async function bootstrap(): Promise<void> {
+  await refreshProfiles();
 
   const state = await sendMessage({ type: "connection/status" });
   if (state.ok) {
@@ -69,7 +119,42 @@ saveButton?.addEventListener("click", async () => {
   setStatus("Saving profile...", "working");
   const result = await sendMessage({ type: "profile/save", vlessUrl });
   setBusy(false);
-  setStatus(result.ok ? "Profile saved successfully" : `Error: ${result.message}`, result.ok ? "idle" : "error");
+  if (!result.ok) {
+    setStatus(`Error: ${result.message}`, "error");
+    return;
+  }
+  renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+  setStatus("Profile saved and selected", "idle");
+});
+
+useProfileButton?.addEventListener("click", async () => {
+  const profileId = getSelectedProfileId();
+  if (!profileId) return;
+  setBusy(true);
+  setStatus("Selecting profile...", "working");
+  const result = await sendMessage({ type: "profile/select", profileId });
+  setBusy(false);
+  if (!result.ok) {
+    setStatus(`Error: ${result.message}`, "error");
+    return;
+  }
+  renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+  setStatus("Active profile updated", "idle");
+});
+
+deleteProfileButton?.addEventListener("click", async () => {
+  const profileId = getSelectedProfileId();
+  if (!profileId) return;
+  setBusy(true);
+  setStatus("Removing profile...", "working");
+  const result = await sendMessage({ type: "profile/delete", profileId });
+  setBusy(false);
+  if (!result.ok) {
+    setStatus(`Error: ${result.message}`, "error");
+    return;
+  }
+  renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
+  setStatus("Profile removed", "disconnected");
 });
 
 connectButton?.addEventListener("click", async () => {
