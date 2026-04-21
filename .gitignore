@@ -8,3 +8,5 @@ agent/__pycache__/
 agent/bin/xray
 agent/bin/sing-box
 agent/runtime/
+go-agent/bin/
+go-agent/runtime/
