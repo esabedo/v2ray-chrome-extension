@@ -77,6 +77,7 @@ curl http://127.0.0.1:8777/v1/diagnostics
 10. Toggle `Auto-retry connect` and verify connect retries up to selected attempts.
 11. Export profiles to JSON, re-import, and verify no invalid profile is accepted.
 12. Open Diagnostics and verify `Copy Bundle` includes sanitized diagnostics + recent events.
+13. Add multiple domains to bypass list (one per line), save, connect, and verify these domains are routed direct.
 
 ## 6) Installer checks
 

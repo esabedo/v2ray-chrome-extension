@@ -20,6 +20,7 @@ Flow:
 - First-run Setup Assistant with one-click full health check.
 - Connection reliability policy: auto-retry with configurable attempts and classified errors.
 - Profile portability: import/export profile JSON directly from popup.
+- Configurable proxy bypass list (sites that should go direct, without VPN/proxy).
 - Support workflow: copyable diagnostics bundle + in-popup recent event timeline.
 - Existing 0.2.0 improvements retained: multi-profile UX, CI smoke stack, schema migration, release hardening.
 
