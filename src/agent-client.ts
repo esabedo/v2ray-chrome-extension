@@ -3,6 +3,7 @@ const AGENT_BASE_URL = "http://127.0.0.1:8777";
 export type AgentStatus = {
   connected: boolean;
   httpProxyPort: number;
+  lastError?: string | null;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

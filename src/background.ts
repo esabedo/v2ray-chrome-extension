@@ -43,7 +43,11 @@ async function disconnect(): Promise<RpcResponse> {
 
 async function status(): Promise<RpcResponse> {
   const s = await getStatus();
-  return { ok: true, connected: s.connected };
+  return {
+    ok: true,
+    connected: s.connected,
+    message: s.lastError ?? (s.connected ? "Connected" : "Disconnected")
+  };
 }
 
 chrome.runtime.onInstalled.addListener(() => {

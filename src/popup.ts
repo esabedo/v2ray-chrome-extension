@@ -26,7 +26,11 @@ async function bootstrap(): Promise<void> {
 
   const state = await sendMessage({ type: "connection/status" });
   if (state.ok) {
-    setStatus(state.connected ? "Connected" : "Disconnected");
+    if (state.connected) {
+      setStatus("Connected");
+      return;
+    }
+    setStatus(state.message ? `Disconnected: ${state.message}` : "Disconnected");
     return;
   }
   setStatus(state.message ?? "Unable to fetch status");
