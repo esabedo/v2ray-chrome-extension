@@ -23,7 +23,7 @@ esac
 
 VERSION="${1:-latest}"
 if [[ "$VERSION" == "latest" ]]; then
-  VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | rg -o '"tag_name":\s*"[^"]+"' | head -n1 | sed -E 's/.*"([^"]+)"/\1/')"
+  VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
 fi
 
 if [[ -z "$VERSION" ]]; then
