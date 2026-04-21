@@ -47,9 +47,11 @@ const checkAgentButton = document.querySelector<HTMLButtonElement>("#checkAgentB
 const copyAgentCommandButton = document.querySelector<HTMLButtonElement>("#copyAgentCommandButton");
 const toggleDiagnosticsButton = document.querySelector<HTMLButtonElement>("#toggleDiagnosticsButton");
 const copyDiagnosticsButton = document.querySelector<HTMLButtonElement>("#copyDiagnosticsButton");
+const copySupportBundleButton = document.querySelector<HTMLButtonElement>("#copySupportBundleButton");
 const diagnosticsPanel = document.querySelector<HTMLElement>("#diagnosticsPanel");
 const diagnosticsText = document.querySelector<HTMLElement>("#diagnosticsText");
 const fixesList = document.querySelector<HTMLElement>("#fixesList");
+const eventTimeline = document.querySelector<HTMLElement>("#eventTimeline");
 const toastHost = document.querySelector<HTMLElement>("#toastHost");
 const profileNameInput = document.querySelector<HTMLInputElement>("#profileNameInput");
 const vlessInput = document.querySelector<HTMLTextAreaElement>("#vlessInput");
@@ -83,8 +85,10 @@ const errorHint = document.querySelector<HTMLElement>("#errorHint");
 type StatusKind = "idle" | "connected" | "disconnected" | "error" | "working";
 let profilesCache: StoredProfile[] = [];
 let diagnosticsCache = "Diagnostics are not loaded yet.";
+let latestDiagnostics: AgentDiagnostics | null = null;
 let lastFixCommands: string[] = [];
 let assistantLastError: string | null = null;
+let eventLog: string[] = [];
 let quickPrimaryAction: "start-agent" | "save-profile" | "connect" | "connected" = "start-agent";
 let quickSecondaryAction: "check-agent" | "copy-setup" | "open-diagnostics" = "check-agent";
 const flowState = {
@@ -231,6 +235,7 @@ function setBusy(busy: boolean): void {
   if (copyAgentCommandButton) copyAgentCommandButton.disabled = busy;
   if (toggleDiagnosticsButton) toggleDiagnosticsButton.disabled = busy;
   if (copyDiagnosticsButton) copyDiagnosticsButton.disabled = busy;
+  if (copySupportBundleButton) copySupportBundleButton.disabled = busy;
   if (quickPrimaryButton) quickPrimaryButton.disabled = busy || quickPrimaryAction === "connected";
   if (quickSecondaryButton) quickSecondaryButton.disabled = busy;
   if (runFullCheckButton) runFullCheckButton.disabled = busy;
@@ -373,6 +378,41 @@ function classifyConnectError(message: string): { summary: string; detail: strin
 function renderDiagnostics(text: string): void {
   diagnosticsCache = text;
   if (diagnosticsText) diagnosticsText.textContent = text;
+}
+
+function logEvent(text: string): void {
+  const stamp = new Date().toLocaleTimeString();
+  eventLog = [`[${stamp}] ${text}`, ...eventLog].slice(0, 8);
+  if (!eventTimeline) return;
+  eventTimeline.textContent = "";
+  for (const item of eventLog) {
+    const li = document.createElement("li");
+    li.textContent = item;
+    eventTimeline.append(li);
+  }
+}
+
+function stripAnsi(text: string): string {
+  return text.replaceAll(/\u001b\[[0-9;]*m/g, "");
+}
+
+function buildSupportBundle(): string {
+  const bundle = {
+    generatedAt: new Date().toISOString(),
+    version: chrome.runtime.getManifest().version,
+    userAgent: navigator.userAgent,
+    flowState,
+    connectPolicy,
+    assistantLastError,
+    events: eventLog,
+    diagnostics: latestDiagnostics
+      ? {
+          ...latestDiagnostics,
+          xrayStderrTail: (latestDiagnostics.xrayStderrTail ?? []).map((line) => stripAnsi(line))
+        }
+      : null
+  };
+  return JSON.stringify(bundle, null, 2);
 }
 
 function downloadTextFile(filename: string, text: string): void {
@@ -528,6 +568,7 @@ async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
     flowState.connected = false;
     assistantLastError = result.message ?? "Diagnostics unavailable";
     renderDiagnostics(`Diagnostics unavailable.\n${result.message ?? "Unknown error"}`);
+    latestDiagnostics = null;
     renderFixes([
       {
         title: "Diagnostics endpoint unavailable",
@@ -544,6 +585,7 @@ async function loadDiagnostics(showPanelAfterLoad = false): Promise<boolean> {
   flowState.profileReady = result.diagnostics.profileExists;
   flowState.connected = result.diagnostics.connected;
   assistantLastError = result.diagnostics.lastError ?? null;
+  latestDiagnostics = result.diagnostics;
   renderDiagnostics(formatDiagnostics(result.diagnostics));
   renderFixes(inferFixes(result.diagnostics));
   if (showPanelAfterLoad) diagnosticsPanel?.classList.remove("hidden");
@@ -693,6 +735,7 @@ async function openDiagnosticsPanel(): Promise<void> {
     }
   }
   setBusy(false);
+  logEvent("Diagnostics panel loaded");
 }
 
 async function doSaveProfile(): Promise<void> {
@@ -713,6 +756,7 @@ async function doSaveProfile(): Promise<void> {
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
     showToast(result.message ?? "Save failed", "error");
+    logEvent(`Profile save failed: ${result.message ?? "unknown error"}`);
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
@@ -720,6 +764,7 @@ async function doSaveProfile(): Promise<void> {
   refreshSetupFlow();
   setStatus("Profile saved and selected", "idle");
   showToast("Profile saved", "ok");
+  logEvent("Profile saved and selected");
 }
 
 async function doConnect(): Promise<void> {
@@ -740,6 +785,7 @@ async function doConnect(): Promise<void> {
       setStatus("Connected via local agent", "connected");
       refreshErrorHint();
       showToast("Connected", "ok");
+      logEvent(`Connected on attempt ${attempt}/${maxAttempts}`);
       return;
     }
 
@@ -751,6 +797,7 @@ async function doConnect(): Promise<void> {
     refreshErrorHint(`${classified.summary}. ${classified.detail}`);
 
     if (attempt < maxAttempts) {
+      logEvent(`Connect attempt ${attempt}/${maxAttempts} failed: ${classified.summary}`);
       await delay(600 * attempt);
     }
   }
@@ -758,6 +805,7 @@ async function doConnect(): Promise<void> {
   setBusy(false);
   setStatus(`Error: ${lastFailure?.summary ?? "Connect failed"}`, "error");
   showToast(lastFailure?.summary ?? "Connect failed", "error");
+  logEvent(`Connect failed: ${lastFailure?.summary ?? "unknown error"}`);
   showOnboarding("Agent service seems unavailable. Check installer/service status.");
   await loadDiagnostics(true).catch(() => undefined);
 }
@@ -768,6 +816,9 @@ async function doCheckAgent(showSuccessToast = true): Promise<boolean> {
   const ok = await refreshConnectionStatus(showSuccessToast).catch(() => false);
   if (!ok) {
     showToast("Agent is still unavailable", "error");
+    logEvent("Agent check failed");
+  } else {
+    logEvent("Agent check passed");
   }
   setBusy(false);
   return ok;
@@ -819,8 +870,10 @@ async function runFullCheck(): Promise<void> {
     renderDiagnostics(formatDiagnostics(diagnosticsResult.diagnostics));
     renderFixes(inferFixes(diagnosticsResult.diagnostics));
     assistantLastError = diagnosticsResult.diagnostics.lastError ?? null;
+    latestDiagnostics = diagnosticsResult.diagnostics;
   } else {
     assistantLastError = diagnosticsResult.message ?? statusResult.message ?? null;
+    latestDiagnostics = null;
   }
 
   refreshSetupFlow();
@@ -830,20 +883,24 @@ async function runFullCheck(): Promise<void> {
   if (!flowState.agentReady) {
     setStatus("Full check: agent unavailable", "error");
     showToast("Full check finished: agent unavailable", "error");
+    logEvent("Full check result: agent unavailable");
     return;
   }
   if (!flowState.profileReady) {
     setStatus("Full check: save a profile to continue", "disconnected");
     showToast("Full check finished: profile required", "error");
+    logEvent("Full check result: profile required");
     return;
   }
   if (!flowState.connected) {
     setStatus("Full check: ready to connect", "disconnected");
     showToast("Full check finished", "ok");
+    logEvent("Full check result: ready to connect");
     return;
   }
   setStatus("Full check: all systems ready", "connected");
   showToast("Full check finished", "ok");
+  logEvent("Full check result: all systems ready");
 }
 
 async function bootstrap(): Promise<void> {
@@ -860,6 +917,7 @@ async function bootstrap(): Promise<void> {
       level: "info"
     }
   ]);
+  logEvent("Popup initialized");
 }
 
 vlessInput?.addEventListener("input", () => {
@@ -885,6 +943,7 @@ useProfileButton?.addEventListener("click", async () => {
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
     showToast(result.message ?? "Select failed", "error");
+    logEvent(`Profile select failed: ${result.message ?? "unknown error"}`);
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
@@ -892,6 +951,7 @@ useProfileButton?.addEventListener("click", async () => {
   refreshSetupFlow();
   setStatus("Active profile updated", "idle");
   showToast("Profile switched", "ok");
+  logEvent("Active profile switched");
 });
 
 deleteProfileButton?.addEventListener("click", async () => {
@@ -909,6 +969,7 @@ deleteProfileButton?.addEventListener("click", async () => {
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
     showToast(result.message ?? "Delete failed", "error");
+    logEvent(`Profile delete failed: ${result.message ?? "unknown error"}`);
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
@@ -919,6 +980,7 @@ deleteProfileButton?.addEventListener("click", async () => {
   refreshSetupFlow();
   setStatus("Profile removed", "disconnected");
   showToast("Profile deleted", "ok");
+  logEvent("Profile deleted");
 });
 
 connectButton?.addEventListener("click", async () => {
@@ -933,6 +995,7 @@ disconnectButton?.addEventListener("click", async () => {
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
     showToast(result.message ?? "Disconnect failed", "error");
+    logEvent(`Disconnect failed: ${result.message ?? "unknown error"}`);
     return;
   }
   flowState.connected = false;
@@ -940,6 +1003,7 @@ disconnectButton?.addEventListener("click", async () => {
   refreshSetupFlow();
   setStatus("Disconnected and proxy reset", "disconnected");
   showToast("Disconnected", "ok");
+  logEvent("Disconnected and proxy reset");
 });
 
 checkAgentButton?.addEventListener("click", async () => {
@@ -969,6 +1033,21 @@ copyDiagnosticsButton?.addEventListener("click", async () => {
   } catch (error: unknown) {
     const text = error instanceof Error ? error.message : "Copy failed";
     showToast(text, "error");
+  }
+});
+
+copySupportBundleButton?.addEventListener("click", async () => {
+  try {
+    const copied = await copyTextToClipboard(buildSupportBundle());
+    if (!copied) {
+      throw new Error("Unable to copy support bundle");
+    }
+    showToast("Support bundle copied", "ok");
+    logEvent("Support bundle copied");
+  } catch (error: unknown) {
+    const text = error instanceof Error ? error.message : "Copy failed";
+    showToast(text, "error");
+    logEvent(`Support bundle copy failed: ${text}`);
   }
 });
 
@@ -1039,11 +1118,13 @@ exportProfilesButton?.addEventListener("click", async () => {
   if (!result.ok) {
     setStatus(result.message ?? "Unable to export profiles", "error");
     showToast("Export failed", "error");
+    logEvent(`Profile export failed: ${result.message ?? "unknown error"}`);
     return;
   }
   const profiles = result.profiles ?? [];
   if (profiles.length === 0) {
     showToast("No profiles to export", "error");
+    logEvent("Profile export skipped: no profiles");
     return;
   }
   const payload = {
@@ -1054,6 +1135,7 @@ exportProfilesButton?.addEventListener("click", async () => {
   const stamp = new Date().toISOString().slice(0, 10);
   downloadTextFile(`v2ray-profiles-${stamp}.json`, JSON.stringify(payload, null, 2));
   showToast(`Exported ${profiles.length} profiles`, "ok");
+  logEvent(`Exported ${profiles.length} profiles`);
 });
 
 importProfilesButton?.addEventListener("click", () => {
@@ -1083,10 +1165,12 @@ importProfilesInput?.addEventListener("change", async () => {
     await refreshProfiles();
     setStatus(`Imported ${imported}/${items.length} profiles`, imported > 0 ? "idle" : "error");
     showToast(imported > 0 ? `Imported ${imported} profiles` : "Import failed", imported > 0 ? "ok" : "error");
+    logEvent(`Imported ${imported}/${items.length} profiles`);
   } catch (error: unknown) {
     const text = error instanceof Error ? error.message : "Import failed";
     setStatus(text, "error");
     showToast(text, "error");
+    logEvent(`Profile import failed: ${text}`);
   } finally {
     setBusy(false);
   }
