@@ -8,15 +8,23 @@
   </head>
   <body>
     <main class="app">
-      <h1>V2Ray Proxy</h1>
-      <label class="label" for="vlessInput">VLESS URL</label>
-      <textarea id="vlessInput" rows="4" placeholder="vless://..."></textarea>
+      <header class="topbar">
+        <h1>V2Ray Proxy</h1>
+        <span id="statusPill" class="status-pill status-idle">Idle</span>
+      </header>
+
+      <section class="field">
+        <label class="label" for="vlessInput">VLESS URL</label>
+        <textarea id="vlessInput" rows="5" placeholder="vless://..."></textarea>
+      </section>
+
       <div class="row">
-        <button id="saveButton" type="button">Save</button>
-        <button id="connectButton" type="button">Connect</button>
-        <button id="disconnectButton" type="button">Disconnect</button>
+        <button id="saveButton" type="button" class="btn btn-secondary">Save</button>
+        <button id="connectButton" type="button" class="btn btn-primary">Connect</button>
+        <button id="disconnectButton" type="button" class="btn btn-ghost">Disconnect</button>
       </div>
-      <pre id="status">Idle</pre>
+
+      <pre id="status" class="status-text">Ready</pre>
     </main>
     <script type="module" src="./popup.js"></script>
   </body>

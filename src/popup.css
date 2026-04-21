@@ -2,56 +2,166 @@
   box-sizing: border-box;
 }
 
+:root {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
-  min-width: 360px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-width: 380px;
+  background: #0f1116;
+  color: #edf2ff;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app {
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  padding: 14px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 h1 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 650;
+  color: #f5f7ff;
+}
+
+.status-pill {
+  border: 1px solid #2a2f41;
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.status-idle {
+  color: #bcc5e6;
+  background: #171b27;
+}
+
+.status-connected {
+  color: #89f0b6;
+  border-color: #1f6640;
+  background: #10221a;
+}
+
+.status-disconnected {
+  color: #ffcb8e;
+  border-color: #705129;
+  background: #21190f;
+}
+
+.status-error {
+  color: #ffadb5;
+  border-color: #6f2630;
+  background: #261217;
+}
+
+.status-working {
+  color: #9dc3ff;
+  border-color: #2450a3;
+  background: #101b33;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
 }
 
 .label {
-  font-size: 12px;
-  color: #4a4a4a;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9eabcf;
 }
 
 textarea {
   width: 100%;
   resize: vertical;
-  border: 1px solid #c6c6c6;
-  border-radius: 6px;
-  padding: 8px;
+  min-height: 92px;
+  border: 1px solid #2a2f41;
+  border-radius: 7px;
+  background: #131722;
+  color: #e4ebff;
+  padding: 9px 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
+  line-height: 1.4;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #4f79ff;
+  box-shadow: 0 0 0 1px #3559c6;
 }
 
 .row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
 }
 
-button {
-  border: 1px solid #c6c6c6;
-  border-radius: 6px;
-  background: #f7f7f7;
+.btn {
+  border-radius: 7px;
   padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
   cursor: pointer;
 }
 
-#status {
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-primary {
+  background: #4f79ff;
+  color: #f4f7ff;
+}
+
+.btn-primary:hover:enabled {
+  background: #6288ff;
+}
+
+.btn-secondary {
+  border-color: #334061;
+  background: #1a2132;
+  color: #d6def7;
+}
+
+.btn-secondary:hover:enabled {
+  background: #222b42;
+}
+
+.btn-ghost {
+  border-color: #473a3f;
+  background: #1f171a;
+  color: #f1c8cf;
+}
+
+.btn-ghost:hover:enabled {
+  background: #291d22;
+}
+
+.status-text {
   margin: 0;
   min-height: 34px;
+  border: 1px solid #252a39;
+  border-radius: 7px;
+  background: #121621;
+  color: #aeb9db;
+  font-size: 11px;
+  line-height: 1.4;
   white-space: pre-wrap;
-  font-size: 12px;
-  color: #2f2f2f;
+  padding: 8px 9px;
 }
