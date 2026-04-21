@@ -10,7 +10,8 @@ const goBin = existsSync("/usr/local/go/bin/go") ? "/usr/local/go/bin/go" : "go"
 
 await mkdir(outDir, { recursive: true });
 
-const args = ["build", "-o", "./bin/v2ray-agent", "./cmd/agent"];
+const agentOut = process.platform === "win32" ? "./bin/v2ray-agent.exe" : "./bin/v2ray-agent";
+const args = ["build", "-o", agentOut, "./cmd/agent"];
 
 const exitCode = await new Promise((resolveCode, rejectCode) => {
   const child = spawn(goBin, args, {

@@ -6,7 +6,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const isWindows = process.platform === "win32";
 const agentBinCandidates = isWindows
-  ? [join(root, "go-agent", "bin", "v2ray-agent.exe"), join(root, "go-agent", "bin", "v2ray-agent")]
+  ? [join(root, "go-agent", "bin", "v2ray-agent.exe")]
   : [join(root, "go-agent", "bin", "v2ray-agent")];
 const singboxBin = isWindows ? join(root, "agent", "bin", "sing-box.exe") : join(root, "agent", "bin", "sing-box");
 const smokeScript = join(root, "scripts", "smoke-agent.mjs");
