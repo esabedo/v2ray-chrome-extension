@@ -1,8 +1,0 @@
-services:
-  agent:
-    build:
-      context: ./agent
-    ports:
-      - "8777:8777"
-    environment:
-      AGENT_MOCK_MODE: "1"

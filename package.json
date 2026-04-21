@@ -11,8 +11,7 @@
     "smoke:agent": "node scripts/smoke-agent.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "singbox:install:macos": "./scripts/install-singbox-macos.sh",
-    "xray:install:macos": "./scripts/install-xray-macos.sh"
+    "singbox:install:macos": "./scripts/install-singbox-macos.sh"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.310",

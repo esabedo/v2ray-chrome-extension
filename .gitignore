@@ -3,10 +3,9 @@ dist/
 coverage/
 .DS_Store
 *.log
-agent/.venv/
-agent/__pycache__/
-agent/bin/xray
 agent/bin/sing-box
+agent/bin/xray
+agent/__pycache__/
 agent/runtime/
 go-agent/bin/
 go-agent/runtime/
