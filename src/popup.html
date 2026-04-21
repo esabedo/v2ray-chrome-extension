@@ -8,6 +8,11 @@
   </head>
   <body>
     <main class="app">
+      <section id="onboardingCard" class="onboarding hidden" aria-live="polite">
+        <h2>Agent Not Running</h2>
+        <p id="onboardingText">Start local agent service to enable connection.</p>
+      </section>
+
       <header class="topbar">
         <h1>V2Ray Proxy</h1>
         <span id="statusPill" class="status-pill status-idle">Idle</span>
@@ -40,6 +45,8 @@
       </div>
 
       <pre id="status" class="status-text">Ready</pre>
+
+      <div id="toastHost" class="toast-host" aria-live="polite"></div>
     </main>
     <script type="module" src="./popup.js"></script>
   </body>

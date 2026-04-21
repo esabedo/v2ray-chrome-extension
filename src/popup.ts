@@ -15,6 +15,9 @@ type ResponsePayload = {
   activeProfileId?: string | null;
 };
 
+const onboardingCard = document.querySelector<HTMLElement>("#onboardingCard");
+const onboardingText = document.querySelector<HTMLElement>("#onboardingText");
+const toastHost = document.querySelector<HTMLElement>("#toastHost");
 const profileNameInput = document.querySelector<HTMLInputElement>("#profileNameInput");
 const vlessInput = document.querySelector<HTMLTextAreaElement>("#vlessInput");
 const validationHint = document.querySelector<HTMLElement>("#validationHint");
@@ -60,6 +63,34 @@ function setValidationHint(text: string, kind: "ok" | "error" | "neutral"): void
   if (!validationHint) return;
   validationHint.textContent = text;
   validationHint.className = kind === "neutral" ? "validation-hint" : `validation-hint ${kind}`;
+}
+
+function showOnboarding(text: string): void {
+  if (onboardingText) onboardingText.textContent = text;
+  onboardingCard?.classList.remove("hidden");
+}
+
+function hideOnboarding(): void {
+  onboardingCard?.classList.add("hidden");
+}
+
+function showToast(message: string, kind: "ok" | "error" = "ok", ttlMs = 2800): void {
+  if (!toastHost) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${kind}`;
+  toast.textContent = message;
+  toastHost.append(toast);
+  requestAnimationFrame(() => {
+    toast.classList.add("visible");
+  });
+  window.setTimeout(() => {
+    toast.classList.remove("visible");
+    window.setTimeout(() => toast.remove(), 180);
+  }, ttlMs);
+}
+
+async function sendMessage(message: object): Promise<ResponsePayload> {
+  return chrome.runtime.sendMessage(message);
 }
 
 function getSelectedProfileId(): string | null {
@@ -142,14 +173,11 @@ function renderProfiles(profiles: StoredProfile[], activeProfileId: string | nul
   fillInputsFromProfile(activeProfileId ?? profiles[0].id);
 }
 
-async function sendMessage(message: object): Promise<ResponsePayload> {
-  return chrome.runtime.sendMessage(message);
-}
-
 async function refreshProfiles(): Promise<void> {
   const result = await sendMessage({ type: "profile/list" });
   if (!result.ok) {
     setStatus(result.message ?? "Unable to load profiles", "error");
+    showToast(result.message ?? "Unable to load profiles", "error");
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
@@ -160,6 +188,7 @@ async function bootstrap(): Promise<void> {
 
   const state = await sendMessage({ type: "connection/status" });
   if (state.ok) {
+    hideOnboarding();
     if (state.connected) {
       setStatus("Connection active", "connected");
       return;
@@ -168,6 +197,7 @@ async function bootstrap(): Promise<void> {
     return;
   }
   setStatus(state.message ?? "Unable to fetch status", "error");
+  showOnboarding("Agent service seems unavailable. Check installer/service status.");
 }
 
 vlessInput?.addEventListener("input", () => {
@@ -183,6 +213,7 @@ saveButton?.addEventListener("click", async () => {
   const vlessUrl = vlessInput?.value.trim() ?? "";
   if (!validateVlessInput()) {
     setStatus("Cannot save invalid profile", "error");
+    showToast("Invalid VLESS URL", "error");
     return;
   }
   setBusy(true);
@@ -195,10 +226,12 @@ saveButton?.addEventListener("click", async () => {
   setBusy(false);
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
+    showToast(result.message ?? "Save failed", "error");
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
   setStatus("Profile saved and selected", "idle");
+  showToast("Profile saved", "ok");
 });
 
 useProfileButton?.addEventListener("click", async () => {
@@ -210,10 +243,12 @@ useProfileButton?.addEventListener("click", async () => {
   setBusy(false);
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
+    showToast(result.message ?? "Select failed", "error");
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
   setStatus("Active profile updated", "idle");
+  showToast("Profile switched", "ok");
 });
 
 deleteProfileButton?.addEventListener("click", async () => {
@@ -230,10 +265,12 @@ deleteProfileButton?.addEventListener("click", async () => {
   setBusy(false);
   if (!result.ok) {
     setStatus(`Error: ${result.message}`, "error");
+    showToast(result.message ?? "Delete failed", "error");
     return;
   }
   renderProfiles(result.profiles ?? [], result.activeProfileId ?? null);
   setStatus("Profile removed", "disconnected");
+  showToast("Profile deleted", "ok");
 });
 
 connectButton?.addEventListener("click", async () => {
@@ -241,7 +278,15 @@ connectButton?.addEventListener("click", async () => {
   setStatus("Connecting...", "working");
   const result = await sendMessage({ type: "connection/connect" });
   setBusy(false);
-  setStatus(result.ok ? "Connected via local agent" : `Error: ${result.message}`, result.ok ? "connected" : "error");
+  if (!result.ok) {
+    setStatus(`Error: ${result.message}`, "error");
+    showToast(result.message ?? "Connect failed", "error");
+    showOnboarding("Agent service seems unavailable. Check installer/service status.");
+    return;
+  }
+  hideOnboarding();
+  setStatus("Connected via local agent", "connected");
+  showToast("Connected", "ok");
 });
 
 disconnectButton?.addEventListener("click", async () => {
@@ -249,7 +294,13 @@ disconnectButton?.addEventListener("click", async () => {
   setStatus("Disconnecting...", "working");
   const result = await sendMessage({ type: "connection/disconnect" });
   setBusy(false);
-  setStatus(result.ok ? "Disconnected and proxy reset" : `Error: ${result.message}`, result.ok ? "disconnected" : "error");
+  if (!result.ok) {
+    setStatus(`Error: ${result.message}`, "error");
+    showToast(result.message ?? "Disconnect failed", "error");
+    return;
+  }
+  setStatus("Disconnected and proxy reset", "disconnected");
+  showToast("Disconnected", "ok");
 });
 
 void bootstrap();
