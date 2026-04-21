@@ -21,12 +21,17 @@ RUNTIME_DIR = ROOT / "runtime"
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 PROFILE_FILE = RUNTIME_DIR / "profile.json"
 XRAY_CONFIG_FILE = RUNTIME_DIR / "xray-config.json"
+SINGBOX_CONFIG_FILE = RUNTIME_DIR / "singbox-config.json"
 XRAY_STDOUT_LOG = RUNTIME_DIR / "xray-stdout.log"
 XRAY_STDERR_LOG = RUNTIME_DIR / "xray-stderr.log"
+SINGBOX_STDOUT_LOG = RUNTIME_DIR / "singbox-stdout.log"
+SINGBOX_STDERR_LOG = RUNTIME_DIR / "singbox-stderr.log"
 XRAY_BIN = os.getenv("XRAY_BIN", "xray")
+SINGBOX_BIN = os.getenv("SINGBOX_BIN", "sing-box")
 HTTP_PROXY_PORT = int(os.getenv("HTTP_PROXY_PORT", "10809"))
 SOCKS_PORT = int(os.getenv("SOCKS_PORT", "10808"))
 AGENT_MOCK_MODE = os.getenv("AGENT_MOCK_MODE", "0") == "1"
+AGENT_CORE = os.getenv("AGENT_CORE", "xray").lower()
 XRAY_OUTBOUND_INTERFACE = os.getenv("XRAY_OUTBOUND_INTERFACE")
 XRAY_SEND_THROUGH = os.getenv("XRAY_SEND_THROUGH")
 XRAY_DOMAIN_STRATEGY = os.getenv("XRAY_DOMAIN_STRATEGY")
@@ -122,6 +127,24 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
     return issues
 
 
+def runtime_core() -> str:
+    if AGENT_CORE not in {"xray", "singbox"}:
+        raise HTTPException(status_code=500, detail=f"Unsupported AGENT_CORE={AGENT_CORE}")
+    return AGENT_CORE
+
+
+def active_config_file() -> Path:
+    return XRAY_CONFIG_FILE if runtime_core() == "xray" else SINGBOX_CONFIG_FILE
+
+
+def active_stdout_log() -> Path:
+    return XRAY_STDOUT_LOG if runtime_core() == "xray" else SINGBOX_STDOUT_LOG
+
+
+def active_stderr_log() -> Path:
+    return XRAY_STDERR_LOG if runtime_core() == "xray" else SINGBOX_STDERR_LOG
+
+
 def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
     stream_settings: dict[str, Any] = {"network": profile["network"]}
     if profile["network"] == "tcp":
@@ -206,10 +229,75 @@ def build_xray_config(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_singbox_config(profile: dict[str, Any]) -> dict[str, Any]:
+    tls_settings: dict[str, Any] = {
+        "enabled": True,
+        "server_name": profile["sni"],
+        "utls": {"enabled": True, "fingerprint": profile["fp"] or "chrome"},
+        "reality": {
+            "enabled": True,
+            "public_key": profile["pbk"],
+            "short_id": profile["sid"] or "",
+        },
+    }
+
+    outbound_proxy: dict[str, Any] = compact_dict(
+        {
+            "type": "vless",
+            "tag": "proxy",
+            "server": profile["host"],
+            "server_port": profile["port"],
+            "uuid": profile["id"],
+            "flow": profile["flow"],
+            "packet_encoding": "xudp",
+            "tls": tls_settings,
+        }
+    )
+
+    if XRAY_OUTBOUND_INTERFACE or XRAY_SEND_THROUGH:
+        outbound_proxy["dial"] = compact_dict(
+            {
+                "bind_interface": XRAY_OUTBOUND_INTERFACE,
+                "inet4_bind_address": XRAY_SEND_THROUGH,
+            }
+        )
+
+    return {
+        "log": {"level": "info"},
+        "inbounds": [
+            {
+                "type": "socks",
+                "tag": "socks-in",
+                "listen": "127.0.0.1",
+                "listen_port": SOCKS_PORT,
+            },
+            {
+                "type": "http",
+                "tag": "http-in",
+                "listen": "127.0.0.1",
+                "listen_port": HTTP_PROXY_PORT,
+            },
+        ],
+        "outbounds": [
+            outbound_proxy,
+            {"type": "direct", "tag": "direct"},
+            {"type": "block", "tag": "block"},
+        ],
+        "route": {
+            "final": "proxy",
+            "auto_detect_interface": True,
+        },
+    }
+
+
 def save_profile(profile: dict[str, Any]) -> None:
     PROFILE_FILE.write_text(json.dumps(profile, ensure_ascii=True, indent=2), encoding="utf-8")
     XRAY_CONFIG_FILE.write_text(
         json.dumps(build_xray_config(profile), ensure_ascii=True, indent=2),
+        encoding="utf-8",
+    )
+    SINGBOX_CONFIG_FILE.write_text(
+        json.dumps(build_singbox_config(profile), ensure_ascii=True, indent=2),
         encoding="utf-8",
     )
 
@@ -240,16 +328,21 @@ def tail_text(path: Path, lines: int = 30) -> list[str]:
     return all_lines[-lines:]
 
 
-def xray_resolved_path() -> str | None:
-    return shutil.which(XRAY_BIN) if os.path.sep not in XRAY_BIN else XRAY_BIN
+def core_binary_name() -> str:
+    return XRAY_BIN if runtime_core() == "xray" else SINGBOX_BIN
+
+
+def core_resolved_path() -> str | None:
+    bin_name = core_binary_name()
+    return shutil.which(bin_name) if os.path.sep not in bin_name else bin_name
 
 
 def probe_xray_version() -> str:
-    path = xray_resolved_path()
+    path = core_resolved_path()
     if not path or not Path(path).exists():
         raise HTTPException(
             status_code=500,
-            detail=f"xray binary not found: {XRAY_BIN}. Install xray-core or set XRAY_BIN.",
+            detail=f"{runtime_core()} binary not found: {core_binary_name()}. Install core or set env path.",
         )
     completed = subprocess.run(
         [path, "version"],
@@ -284,21 +377,27 @@ def start_xray() -> None:
     if AGENT_MOCK_MODE:
         _xray_process = None
         return
-    if not XRAY_CONFIG_FILE.exists():
-        raise HTTPException(status_code=400, detail="Missing generated xray config")
-    path = xray_resolved_path()
+    config_file = active_config_file()
+    if not config_file.exists():
+        raise HTTPException(status_code=400, detail=f"Missing generated {runtime_core()} config")
+    path = core_resolved_path()
     if not path:
         raise HTTPException(
             status_code=500,
-            detail=f"xray binary not found: {XRAY_BIN}. Install xray-core or set XRAY_BIN.",
+            detail=f"{runtime_core()} binary not found: {core_binary_name()}. Install core or set env path.",
         )
     try:
-        XRAY_STDOUT_LOG.write_text("", encoding="utf-8")
-        XRAY_STDERR_LOG.write_text("", encoding="utf-8")
-        stdout_log = XRAY_STDOUT_LOG.open("a", encoding="utf-8")
-        stderr_log = XRAY_STDERR_LOG.open("a", encoding="utf-8")
+        stdout_path = active_stdout_log()
+        stderr_path = active_stderr_log()
+        stdout_path.write_text("", encoding="utf-8")
+        stderr_path.write_text("", encoding="utf-8")
+        stdout_log = stdout_path.open("a", encoding="utf-8")
+        stderr_log = stderr_path.open("a", encoding="utf-8")
+        command = [path, "run", "-config", str(config_file)]
+        if runtime_core() == "singbox":
+            command = [path, "run", "-c", str(config_file)]
         _xray_process = subprocess.Popen(
-            [path, "run", "-config", str(XRAY_CONFIG_FILE)],
+            command,
             stdout=stdout_log,
             stderr=stderr_log,
             text=True,
@@ -310,8 +409,8 @@ def start_xray() -> None:
         if _xray_process.poll() is not None:
             code = _xray_process.returncode
             _xray_process = None
-            logs = tail_text(XRAY_STDERR_LOG, lines=8)
-            msg = f"xray exited early with code {code}"
+            logs = tail_text(active_stderr_log(), lines=8)
+            msg = f"{runtime_core()} exited early with code {code}"
             if logs:
                 msg = f"{msg}; last stderr: {' | '.join(logs)}"
             _last_error = msg
@@ -320,7 +419,7 @@ def start_xray() -> None:
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"xray binary not found: {XRAY_BIN}. Use AGENT_MOCK_MODE=1 for local tests.",
+            detail=f"{runtime_core()} binary not found: {core_binary_name()}. Use AGENT_MOCK_MODE=1 for local tests.",
         ) from exc
     except TimeoutError as exc:
         stop_xray()
@@ -349,15 +448,18 @@ def diagnostics() -> dict[str, Any]:
             xray_version = f"error: {exc}"
     return {
         "mockMode": AGENT_MOCK_MODE,
+        "agentCore": runtime_core(),
         "xrayBin": XRAY_BIN,
+        "singboxBin": SINGBOX_BIN,
         "xrayVersion": xray_version,
         "httpProxyPort": HTTP_PROXY_PORT,
         "socksProxyPort": SOCKS_PORT,
         "profileExists": PROFILE_FILE.exists(),
         "configExists": XRAY_CONFIG_FILE.exists(),
+        "singboxConfigExists": SINGBOX_CONFIG_FILE.exists(),
         "connected": _connected,
         "lastError": _last_error,
-        "xrayStderrTail": tail_text(XRAY_STDERR_LOG, lines=10),
+        "xrayStderrTail": tail_text(active_stderr_log(), lines=10),
         "xrayOutboundInterface": XRAY_OUTBOUND_INTERFACE,
         "xraySendThrough": XRAY_SEND_THROUGH,
         "xrayDomainStrategy": XRAY_DOMAIN_STRATEGY,
@@ -428,8 +530,8 @@ def status() -> dict[str, Any]:
     if _connected and not AGENT_MOCK_MODE and not process_alive:
         if _last_error is None:
             code = _xray_process.returncode if _xray_process is not None else None
-            logs = tail_text(XRAY_STDERR_LOG, lines=10)
-            base = f"xray process exited (code={code})"
+            logs = tail_text(active_stderr_log(), lines=10)
+            base = f"{runtime_core()} process exited (code={code})"
             _last_error = f"{base}; last stderr: {' | '.join(logs)}" if logs else base
         _connected = False
         return {
@@ -447,6 +549,7 @@ def status() -> dict[str, Any]:
 @app.get("/v1/xray/logs")
 def xray_logs() -> dict[str, Any]:
     return {
-        "stdout": tail_text(XRAY_STDOUT_LOG, lines=80),
-        "stderr": tail_text(XRAY_STDERR_LOG, lines=80),
+        "core": runtime_core(),
+        "stdout": tail_text(active_stdout_log(), lines=80),
+        "stderr": tail_text(active_stderr_log(), lines=80),
     }

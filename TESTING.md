@@ -61,7 +61,29 @@ If you cannot disable another VPN:
 - then retest connect and traffic,
 - inspect `GET /v1/xray/logs` for Reality handshake errors.
 
-## 4) Manual extension test (browser)
+## 4) Real sing-box diagnostics test (macOS)
+
+1. Install sing-box:
+
+```bash
+npm run singbox:install:macos
+```
+
+2. Run agent locally with sing-box:
+
+```bash
+npm run agent:run:singbox
+```
+
+3. Verify diagnostics:
+
+```bash
+curl http://127.0.0.1:8777/v1/diagnostics
+```
+
+Expected: `"agentCore": "singbox"`.
+
+## 5) Manual extension test (browser)
 
 1. Build extension: `npm run build`.
 2. Open Chromium `chrome://extensions`.
@@ -72,7 +94,7 @@ If you cannot disable another VPN:
 7. Click `Save`, then `Connect`, then `Disconnect`.
 8. Verify state text and no extension errors in service worker console.
 
-## 5) Planned E2E
+## 6) Planned E2E
 
 - Use Playwright with persistent context and loaded unpacked extension.
 - Scenarios:

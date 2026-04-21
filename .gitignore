@@ -6,4 +6,5 @@ coverage/
 agent/.venv/
 agent/__pycache__/
 agent/bin/xray
+agent/bin/sing-box
 agent/runtime/

@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "agent:run": "./scripts/run-agent-local.sh",
+    "agent:run:singbox": "AGENT_CORE=singbox ./scripts/run-agent-local.sh",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "clean": "rm -rf dist",
     "smoke:agent": "node scripts/smoke-agent.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "singbox:install:macos": "./scripts/install-singbox-macos.sh",
     "xray:install:macos": "./scripts/install-xray-macos.sh"
   },
   "devDependencies": {
