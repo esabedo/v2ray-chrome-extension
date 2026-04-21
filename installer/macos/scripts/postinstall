@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+PLIST_PATH="/Library/LaunchDaemons/com.v2rayextension.agent.plist"
+
+chown root:wheel "$PLIST_PATH"
+chmod 644 "$PLIST_PATH"
+
+launchctl bootout system "$PLIST_PATH" >/dev/null 2>&1 || true
+launchctl bootstrap system "$PLIST_PATH"
+launchctl enable system/com.v2rayextension.agent || true
+launchctl kickstart -k system/com.v2rayextension.agent || true
+
+exit 0

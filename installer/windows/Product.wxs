@@ -16,6 +16,22 @@
       <Directory Id="INSTALLFOLDER" Name="V2Ray Extension Agent">
         <Component Id="cmpAgentExe" Guid="*">
           <File Id="filAgentExe" Source="$(var.StageDir)\v2ray-agent.exe" KeyPath="yes" />
+          <ServiceInstall
+            Id="svcInstallAgent"
+            Name="V2RayExtensionAgent"
+            DisplayName="V2Ray Extension Agent"
+            Description="Local agent service for browser VLESS proxy."
+            Start="auto"
+            Type="ownProcess"
+            ErrorControl="normal"
+            Vital="yes" />
+          <ServiceControl
+            Id="svcControlAgent"
+            Name="V2RayExtensionAgent"
+            Start="install"
+            Stop="both"
+            Remove="uninstall"
+            Wait="yes" />
         </Component>
 
         <Component Id="cmpSingboxExe" Guid="*">

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -86,11 +85,12 @@ func getenvDuration(name string, fallback time.Duration) time.Duration {
 }
 
 func newState() (*agentState, error) {
-	root, err := os.Getwd()
+	execPath, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
-	runtimeDir := filepath.Join(root, "go-agent", "runtime")
+	execDir := filepath.Dir(execPath)
+	runtimeDir := fallback(os.Getenv("AGENT_RUNTIME_DIR"), filepath.Join(execDir, "runtime"))
 	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func newState() (*agentState, error) {
 		configFile: filepath.Join(runtimeDir, "singbox-config.json"),
 		stdoutLog: filepath.Join(runtimeDir, "singbox-stdout.log"),
 		stderrLog: filepath.Join(runtimeDir, "singbox-stderr.log"),
-		singboxBin: fallback(os.Getenv("SINGBOX_BIN"), filepath.Join(root, "agent", "bin", "sing-box")),
+		singboxBin: fallback(os.Getenv("SINGBOX_BIN"), filepath.Join(execDir, "sing-box")),
 		httpProxyPort: getenvInt("HTTP_PROXY_PORT", 10809),
 		socksProxyPort: getenvInt("SOCKS_PORT", 10808),
 		startupTimeout: getenvDuration("CORE_STARTUP_TIMEOUT", 8*time.Second),
@@ -537,10 +537,6 @@ func main() {
 		Handler: mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-
-	go func() {
-		<-context.Background().Done()
-	}()
 
 	log.Printf("go-agent listening on %s", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

@@ -50,6 +50,8 @@ Build macOS installer package:
 npm run package:macos
 ```
 
+The macOS installer registers and starts `com.v2rayextension.agent` via `launchd`.
+
 ## Windows packaging
 
 On Windows host:
@@ -66,3 +68,5 @@ npm run singbox:install:windows
 ```powershell
 npm run package:windows
 ```
+
+The MSI installs and auto-starts `V2RayExtensionAgent` Windows service.
