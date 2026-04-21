@@ -5,7 +5,9 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const isWindows = process.platform === "win32";
-const agentBin = isWindows ? join(root, "go-agent", "bin", "v2ray-agent.exe") : join(root, "go-agent", "bin", "v2ray-agent");
+const agentBinCandidates = isWindows
+  ? [join(root, "go-agent", "bin", "v2ray-agent.exe"), join(root, "go-agent", "bin", "v2ray-agent")]
+  : [join(root, "go-agent", "bin", "v2ray-agent")];
 const singboxBin = isWindows ? join(root, "agent", "bin", "sing-box.exe") : join(root, "agent", "bin", "sing-box");
 const smokeScript = join(root, "scripts", "smoke-agent.mjs");
 
@@ -37,13 +39,25 @@ async function assertExecutable(path) {
   await access(path, mode);
 }
 
+async function resolveExistingPath(candidates) {
+  for (const candidate of candidates) {
+    try {
+      await assertExecutable(candidate);
+      return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error(`Executable not found. Tried: ${candidates.join(", ")}`);
+}
+
 async function run() {
   let agent;
   let shouldStopAgent = false;
   const alreadyRunning = await isHealthReady();
 
   if (!alreadyRunning) {
-    await assertExecutable(agentBin);
+    const agentBin = await resolveExistingPath(agentBinCandidates);
     await assertExecutable(singboxBin);
     agent = spawn(agentBin, [], {
       cwd: root,
